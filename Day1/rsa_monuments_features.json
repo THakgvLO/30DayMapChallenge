@@ -1,0 +1,564 @@
+{
+  "type": "FeatureCollection",
+  "name": "South African Historic Monuments by Province",
+  "features": [
+    
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Robben Island",
+        "province": "Western Cape",
+        "description": "UNESCO World Heritage Site; prison of Nelson Mandela. Departure point from Cape Town."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [18.3995, -33.8055] 
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Castle of Good Hope",
+        "province": "Western Cape",
+        "description": "Oldest surviving colonial building in South Africa (1666)."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [18.4283, -33.9250] 
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Cango Caves",
+        "province": "Western Cape",
+        "description": "20-million-year-old cave system with evidence of early San inhabitation and rock art."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [22.2147, -33.4000]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Cradle of Humankind",
+        "province": "Gauteng",
+        "description": "UNESCO World Heritage Site; Sterkfontein Caves and hominid fossils."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [27.7000, -25.9800]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Apartheid Museum",
+        "province": "Gauteng",
+        "description": "Primary museum detailing the rise and fall of Apartheid in Johannesburg."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [27.9944, -26.2372]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Union Buildings",
+        "province": "Gauteng",
+        "description": "Seat of government in Pretoria; site of Mandela's inauguration."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [28.2274, -25.7410]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "uKhahlamba-Drakensberg Park (Rock Art)",
+        "province": "KwaZulu-Natal",
+        "description": "UNESCO Site; San rock art and natural beauty."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [29.2882, -29.2800]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Isandlwana Battlefield",
+        "province": "KwaZulu-Natal",
+        "description": "Key Anglo-Zulu War battle site (1879)."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [30.5694, -28.3614]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Nelson Mandela Capture Site",
+        "province": "KwaZulu-Natal",
+        "description": "Site of Mandela's 1964 arrest, featuring a major sculpture."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [30.2267, -29.5606]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Nelson Mandela Museum (Qunu)",
+        "province": "Eastern Cape",
+        "description": "Memorials and exhibits related to Mandela’s life in his home region."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [28.5333, -31.7917]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Sarah Baartman Heritage Site",
+        "province": "Eastern Cape",
+        "description": "Memorial and burial site for the Khoikhoi woman, Sarah Baartman."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [25.6888, -33.7222]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Old Fort (Makhanda / Grahamstown)",
+        "province": "Eastern Cape",
+        "description": "Historic military structure from the Frontier Wars era."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [26.5200, -33.3000]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Vredefort Dome",
+        "province": "Free State",
+        "description": "UNESCO World Heritage Site; largest, oldest verified meteorite impact crater."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [27.2600, -27.0000]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Anglo-Boer War Museum",
+        "province": "Free State",
+        "description": "Museum dedicated to the history of the South African Wars."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [26.2167, -29.1167]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Basotho Cultural Village",
+        "province": "Free State",
+        "description": "A living museum celebrating the tradition and culture of the South Sotho people."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [28.7167, -28.5333]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Mapungubwe Cultural Landscape",
+        "province": "Limpopo",
+        "description": "UNESCO Site; capital of a pre-colonial kingdom (9th-14th centuries)."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [29.3500, -22.1900]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Makapans Valley and Limeworks",
+        "province": "Limpopo",
+        "description": "Fossil and archaeological site with evidence of early human ancestors."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [29.1558, -24.1683]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Thulamela Ruins",
+        "province": "Limpopo",
+        "description": "Late Iron Age stone-walled fortress in Kruger National Park."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [31.0000, -22.3833]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Barberton Makhonjwa Mountains",
+        "province": "Mpumalanga",
+        "description": "UNESCO Site; one of the world's oldest geological structures."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [31.0500, -25.7500]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Blyde River Canyon (Bourke's Luck Potholes)",
+        "province": "Mpumalanga",
+        "description": "Significant natural landmark and heritage area on the Panorama Route."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [30.8389, -24.6461]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Sudwala Caves",
+        "province": "Mpumalanga",
+        "description": "One of the world's oldest cave systems, historically significant."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [30.6389, -25.4344]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Taung Skull Site",
+        "province": "North West",
+        "description": "Site where the 'Taung Child' fossil was discovered, a key hominid find."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [24.0400, -27.5700]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Kaditshwene Cultural Landscape (Ruins)",
+        "province": "North West",
+        "description": "Extensive ruins of a large pre-colonial Tswana settlement."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [25.7000, -24.8500]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Kedar Heritage Lodge / Boekenhoutfontein",
+        "province": "North West",
+        "description": "Historical home of President Paul Kruger"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [27.2842, -25.4674]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Richtersveld Cultural Landscape",
+        "province": "Northern Cape",
+        "description": "UNESCO Site; cultural heartland of the Nama people."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [17.5500, -28.9333]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Kimberley's Big Hole and Mine Museum",
+        "province": "Northern Cape",
+        "description": "Large, hand-dug diamond mine and museum of the diamond rush era."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [24.7500, -28.7333]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Wonderwerk Cave",
+        "province": "Northern Cape",
+        "description": "Cave with evidence of human occupation dating back millions of years."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [23.5500, -27.8167]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Cape Agulhas (Southernmost Tip)",
+        "province": "Western Cape",
+        "description": "The geographical meeting point of the Atlantic and Indian Oceans.",
+        "category": "Natural Feature"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [20.0000, -34.8333]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "SKA MeerKAT Radio Telescope",
+        "province": "Western Cape",
+        "description": "Advanced research facility for radio astronomy in the Karoo.",
+        "category": "Infrastructure"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [21.4300, -30.7100]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Soweto Towers (Orlando Towers)",
+        "province": "Gauteng",
+        "description": "Iconic, brightly painted cooling towers used for extreme sports.",
+        "category": "Cultural/Urban"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [27.9100, -26.2640]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Lion & Safari Park",
+        "province": "Gauteng",
+        "description": "Major accessible wildlife conservation and interaction centre.",
+        "category": "Wildlife"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [27.8760, -25.8670]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Port of Durban",
+        "province": "KwaZulu-Natal",
+        "description": "The busiest commercial seaport in Africa, an economic hub.",
+        "category": "Infrastructure"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [31.0250, -29.8700]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Midmar Dam",
+        "province": "KwaZulu-Natal",
+        "description": "Large water body famous for the annual Midmar Mile open-water swim.",
+        "category": "Natural Feature"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [30.2200, -29.4900]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Hogsback Village and Forest",
+        "province": "Eastern Cape",
+        "description": "Misty, scenic village and forest often compared to Tolkien's settings.",
+        "category": "Cultural/Natural"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [26.9667, -32.5833]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Aliwal Shoal (Marine Protected Area)",
+        "province": "Eastern Cape",
+        "description": "World-renowned marine protected area and dive site (represented by a coastal point).",
+        "category": "Natural Feature"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [30.8500, -30.2500]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Gariep Dam",
+        "province": "Free State",
+        "description": "South Africa's largest storage dam, creating a massive inland lake.",
+        "category": "Infrastructure"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [25.5000, -30.5833]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Sterkfontein Dam Nature Reserve",
+        "province": "Free State",
+        "description": "South Africa's third-largest dam, located in the Drakensberg foothills.",
+        "category": "Natural Feature"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [29.3800, -27.8900]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Kruger National Park (Punda Maria Gate)",
+        "province": "Limpopo",
+        "description": "Northern entrance to Kruger, representing the park's vastness.",
+        "category": "Wildlife"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [31.0000, -22.4500]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Tzaneen Dam",
+        "province": "Limpopo",
+        "description": "Key landmark in the region known as South Africa's 'food basket'."
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [30.1300, -23.7700]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Witbank Dam (Emalahleni)",
+        "province": "Mpumalanga",
+        "description": "Large dam symbolizing the province's coal and energy production.",
+        "category": "Infrastructure"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [29.3500, -25.8333]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Long Tom Pass",
+        "province": "Mpumalanga",
+        "description": "Scenic mountain pass with historical Anglo-Boer War significance.",
+        "category": "Natural Feature"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [30.5600, -25.1700]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Augrabies Falls National Park",
+        "province": "Northern Cape",
+        "description": "Dramatic waterfalls on the Orange River, a major natural wonder.",
+        "category": "Natural Feature"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [20.3333, -28.5833]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Carnarvon Hotel (Karoo Heritage)",
+        "province": "Northern Cape",
+        "description": "Historic small-town hotel in the heart of the remote Karoo region.",
+        "category": "Cultural/Urban"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [23.8600, -30.9500]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Hartbeespoort Dam",
+        "province": "North West",
+        "description": "Major leisure, water sports, and cableway hub close to Gauteng.",
+        "category": "Infrastructure"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [27.8800, -25.7300]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Madikwe Game Reserve",
+        "province": "North West",
+        "description": "A large, malaria-free 'Big Five' game reserve near the Botswana border.",
+        "category": "Wildlife"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [26.2500, -24.7500]
+      }
+    }
+  ]
+}
