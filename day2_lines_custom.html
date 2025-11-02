@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Custom Start/End Optimized Route (Using /trip/)</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        html, body, #map { height: 100%; margin: 0; }
+        
+        .info {
+            position: absolute; top: 12px; right: 12px;
+            background: #fff; padding: 12px 14px; border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.1);
+            font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+            z-index: 9999; 
+        }
+
+        .controls { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #ccc; }
+        .controls label { display: block; margin-top: 5px; font-weight: bold; }
+        .controls select { width: 100%; padding: 5px; margin-top: 2px; border: 1px solid #ccc; border-radius: 4px; }
+        
+        .info b { display:block; margin-bottom:6px; font-size:16px; }
+        .info .row { white-space: nowrap; margin-bottom: 3px; }
+
+        .legend-title {
+            font-weight: bold;
+            margin-top: 10px; 
+            margin-bottom: 5px;
+            border-top: 1px solid #ccc;
+            padding-top: 5px;
+        }
+        .legend-icon {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+            vertical-align: middle; 
+        }
+        .legend-monument { background-color: #ff0000; border: 1.5px solid #ff0000; }
+        .legend-interest { background-color: #3399ff; border: 2px solid #0055ff; }
+    </style>
+</head>
+<body>
+    <h1>South African Route Challenge: Custom Start/End Shortest Path</h1>
+    <div id="map"></div>
+        
+    <div id="info" class="info">
+        
+        <div class="controls">
+            <b>Customize Trip</b>
+            <label for="start-point-select">Start Point:</label>
+            <select id="start-point-select"></select>
+            <label for="end-point-select">End Point:</label>
+            <select id="end-point-select"></select>
+        </div>
+        
+        <b>Route Stats</b>
+        <div class="row" id="total-distance-row">Total distance: Awaiting Route...</div>
+        <div class="row" id="est-time-row">Est. time: Awaiting Route...</div>
+        <div class="row">Places: 45</div>
+        <div class="row" id="longest-leg-row">Longest leg: Awaiting Route...</div>
+        
+        <div id="legend-placeholder"></div>
+    </div>
+    <script>
+        let map = L.map('map').setView([-29.5, 24.5], 6);
+        let geojsonLayer = null;
+        let routeLayer = null;
+        let allPoints = []; // Stores all GeoJSON features
+        let geojson = null; // Store the original GeoJSON object here
+
+        // Initialize Map Tiles
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors &copy; Carto'
+        }).addTo(map);
+
+        function drawRoute(startName, endName) {
+            if (!allPoints.length || !geojson) return; // Ensure all data is loaded
+            
+            // Clean up old layers
+            if (routeLayer) { map.removeLayer(routeLayer); }
+            if (geojsonLayer) { map.removeLayer(geojsonLayer); }
+
+            // Prepare points for OSRM
+            let pointsToRoute = [...allPoints]; 
+            let startIdx = pointsToRoute.findIndex(f => f.properties.name === startName);
+            let endIdx = pointsToRoute.findIndex(f => f.properties.name === endName);
+
+            if (startIdx === -1 || endIdx === -1 || startIdx === endIdx) {
+                console.error('Invalid start or end point selection.');
+                // Redraw points with default styling if route is invalid
+                drawPoints(startName, endName); 
+                return;
+            }
+            
+            let startPoint = pointsToRoute.splice(startIdx, 1)[0]; 
+            pointsToRoute.unshift(startPoint); 
+            let currentEndIdx = pointsToRoute.findIndex(f => f.properties.name === endName);
+            let endPoint = pointsToRoute.splice(currentEndIdx, 1)[0]; 
+            pointsToRoute.push(endPoint); 
+            
+            // Build OSRM URL
+            let coords = [];
+            for (let f of pointsToRoute) {
+                let c = f.geometry.coordinates;
+                coords.push(c[0] + ',' + c[1]);
+            }
+            let url = 'https://router.project-osrm.org/trip/v1/driving/' + coords.join(';') + 
+                '?roundtrip=false&source=first&destination=last&geometries=geojson&overview=full';
+
+            // Fetch the optimized route
+            fetch(url)
+                .then(function(r){ return r.json(); })
+                .then(function(data){
+                    
+                    if (data && data.trips && data.trips.length > 0) {
+                        let route = data.trips[0];
+                        let geom = route.geometry;
+                        
+                        // Draw route line
+                        routeLayer = L.geoJSON(geom, {
+                            style: function(){ return { color: '#00ffff', weight: 4, opacity: 0.8 }; }
+                        }).addTo(map);
+
+                        let dist = (route.distance / 1000).toFixed(1) + ' km';
+                        let hrs = Math.floor(route.duration / 3600);
+                        let mins = Math.round((route.duration % 3600) / 60);
+                        let dur = hrs + ' h ' + mins + ' min';
+                        let longest = 0;
+                        
+                        if (route.legs && route.legs.length) {
+                            for (let j = 0; j < route.legs.length; j++) {
+                                if (route.legs[j].distance > longest) longest = route.legs[j].distance;
+                            }
+                        }
+                        
+                        document.getElementById('total-distance-row').textContent = 'Total distance: ' + dist;
+                        document.getElementById('est-time-row').textContent = 'Est. time: ' + dur;
+                        document.getElementById('longest-leg-row').textContent = 'Longest leg: ' + (longest / 1000).toFixed(1) + ' km';
+                        
+                        let legendHtml = 
+                            '<div class="legend-title">Point Styles</div>' +
+                            '<div><span class="legend-icon" style="border: 3px solid #00AA00; background-color: #AAFF00;"></span> Start Point</div>' +
+                            '<div><span class="legend-icon" style="border: 3px solid #AA0000; background-color: #FF5555;"></span> End Point</div>' +
+                            '<div><span class="legend-icon legend-monument"></span> Monuments (Red Fill)</div>' +
+                            '<div><span class="legend-icon legend-interest"></span> Other Sites (Blue Fill)</div>';
+                        
+                        document.getElementById('legend-placeholder').innerHTML = legendHtml;
+                    }
+                    drawPoints(startName, endName);
+                });
+        }
+        
+        function drawPoints(startName, endName) {
+             if (geojsonLayer) { map.removeLayer(geojsonLayer); }
+
+             geojsonLayer = L.geoJSON(geojson, { 
+                pointToLayer: function(feature, latlng) {
+                    let options = {};
+                    
+                    if (feature.properties.category) { 
+                        // Other Sites (Blue)
+                        options = { radius: 7, color: '#0055ff', weight: 2, fillColor: '#3399ff', fillOpacity: 0.8 };
+                    } else { 
+                        // Monuments (Red)
+                        options = { radius: 6, color: '#ff0000', weight: 1.5, fillColor: '#ff0000', fillOpacity: 0.85 };
+                    }
+
+                    // Conditionally OVERRIDE base styles for Start/End points
+                    if (feature.properties.name === startName) { 
+                        options.color = '#00AA00'; // Green outline
+                        options.weight = 3;
+                        options.fillColor = '#AAFF00'; // Light green fill
+                        options.radius = 8;
+                    } else if (feature.properties.name === endName) { 
+                        options.color = '#AA0000'; // Dark Red outline
+                        options.weight = 3;
+                        options.fillColor = '#FF5555'; // Pink/Red fill
+                        options.radius = 8;
+                    }
+
+                    return L.circleMarker(latlng, options);
+                },
+                onEachFeature: function(feature, marker) {
+                    let name = feature.properties && feature.properties.name ? feature.properties.name : '';
+                    let desc = feature.properties && feature.properties.description ? feature.properties.description : '';
+                    let category = feature.properties && feature.properties.category ? '<br> **Category:** ' + feature.properties.category : '';
+                    marker.bindPopup('<b>' + name + '</b>' + category + (desc ? '<br>' + desc : ''));
+                }
+            }).addTo(map);
+
+            if (geojsonLayer && geojsonLayer.bringToFront) { geojsonLayer.bringToFront(); }
+            map.fitBounds(geojsonLayer.getBounds(), { padding: [20, 20] });
+        }
+
+
+        // --- INITIALIZATION: LOAD DATA AND SETUP DROPDOWNS ---
+        fetch('rsa_monuments_features.json')
+            .then(r => r.json())
+            .then(data => {
+                geojson = data; // Store the data globally
+                allPoints = geojson.features.filter(f => f.geometry && f.geometry.type === 'Point');
+                
+                let selectStart = document.getElementById('start-point-select');
+                let selectEnd = document.getElementById('end-point-select');
+                let pointNames = [];
+
+                // Populate dropdowns
+                allPoints.forEach(f => {
+                    if (f.properties.name) {
+                        pointNames.push(f.properties.name);
+                        let option = new Option(f.properties.name, f.properties.name);
+                        selectStart.add(option.cloneNode(true));
+                        selectEnd.add(option);
+                    }
+                });
+                
+                // Set initial values
+                selectStart.value = pointNames[0] || ''; 
+                selectEnd.value = pointNames[pointNames.length - 1] || ''; 
+                
+                // Attach event listeners
+                selectStart.addEventListener('change', () => drawRoute(selectStart.value, selectEnd.value));
+                selectEnd.addEventListener('change', () => drawRoute(selectStart.value, selectEnd.value));
+
+                // Draw initial route
+                drawRoute(selectStart.value, selectEnd.value);
+            });
+    </script>
+</body>
+</html>

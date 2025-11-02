@@ -1,7 +1,5 @@
 <!DOCTYPE html>
-
 <html lang="en">
-
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -21,7 +19,6 @@
 
     .info b { display:block; margin-bottom:6px; font-size:16px; }
     .info .row { white-space: nowrap; margin-bottom: 3px; }
-
     .legend-title {
         font-weight: bold;
         margin-top: 10px;
@@ -48,13 +45,10 @@
         background-color: #3399ff;
         border: 2px solid #0055ff;
     }
-
   </style>
-
 </head>
-
 <body>
-  <div id="map"></div>    
+  <div id="map"></div>
       <div id="info" class="info">
     <b>Route Stats</b>
     <div class="row">Total distance: Calculating...</div>
@@ -73,17 +67,17 @@
     fetch('rsa_monuments_features.json')
       .then(function(r){ return r.json(); })
       .then(function(geojson){
-
         // collect coordinates for OSRM
         let coords = [];
         let placeCount = 0;
 
         // Iterate through all features to collect coordinates
+
         for (let i = 0; i < geojson.features.length; i++) {
           let f = geojson.features[i];
 
           if (f && f.geometry && f.geometry.type === 'Point') {
-            let c = f.geometry.coordinates;
+            let c = f.geometry.coordinates; // [lon, lat]
             coords.push(c[0] + ',' + c[1]);
             placeCount += 1;
           }
@@ -93,14 +87,14 @@
           //coords.push(coords[0]);
         }
 
+        // Construct the OSRM URL
         let url = 'https://router.project-osrm.org/trip/v1/driving/' + coords.join(';') + '?roundtrip=true&source=any&destination=any&geometries=geojson&overview=full';
-        //let url = 'https://router.project-osrm.org/route/v1/driving/' + coords.join(';') + '?overview=full&geometries=geojson';
+
+        // Fetch the trip data from OSRM
 
         fetch(url)
           .then(function(r){ return r.json(); })
           .then(function(data){
-
-            //draw trip first 
             if (data && data.trips && data.trips.length > 0) {
               let route = data.trips[0];
               let geom = route.geometry;
@@ -108,8 +102,7 @@
               L.geoJSON(geom, {
                 style: function(){ return { color: '#00ffff', weight: 4, opacity: 0.8 }; }
               }).addTo(map);
-              
-              //update info panel with stats
+
               let dist = (route.distance / 1000).toFixed(1) + ' km';
               let hrs = Math.floor(route.duration / 3600);
               let mins = Math.round((route.duration % 3600) / 60);
@@ -142,16 +135,15 @@
                 if (feature.properties.category) {
                   return L.circleMarker(latlng, {
                       radius: 7,
-                      color: '#0055ff',
+                      color: '#0055ff', // Blue for sites of interest
                       weight: 2,
                       fillColor: '#3399ff',
                       fillOpacity: 0.8
                   });
-
                 } else {
                     return L.circleMarker(latlng, {
                       radius: 6,
-                      color: '#ff0000',
+                      color: '#ff0000', // Red for monuments
                       weight: 1.5,
                       fillColor: '#ff0000',
                       fillOpacity: 0.85
