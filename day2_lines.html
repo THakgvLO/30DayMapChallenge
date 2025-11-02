@@ -89,12 +89,15 @@
 
         // Construct the OSRM URL
         let url = 'https://router.project-osrm.org/trip/v1/driving/' + coords.join(';') + '?roundtrip=true&source=any&destination=any&geometries=geojson&overview=full';
+        //let url = 'https://router.project-osrm.org/route/v1/driving/' + coords.join(';') + '?overview=full&geometries=geojson';
 
         // Fetch the trip data from OSRM
 
         fetch(url)
           .then(function(r){ return r.json(); })
           .then(function(data){
+            //if (data && data.routes && data.routes.length > 0) {
+              //let route = data.routes[0];
             if (data && data.trips && data.trips.length > 0) {
               let route = data.trips[0];
               let geom = route.geometry;
