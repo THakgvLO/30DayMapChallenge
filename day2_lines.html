@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Day 2 (SA Route & Stats)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+
+    .info {
+      position: absolute; top: 12px; right: 12px;
+      background: #fff; padding: 12px 14px; border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.1);
+      font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      z-index: 9999; /* Ensure it stays on top */
+    }
+
+    .info b { display:block; margin-bottom:6px; font-size:16px; }
+    .info .row { white-space: nowrap; margin-bottom: 3px; }
+
+    .legend-title {
+        font-weight: bold;
+        margin-top: 10px;
+        margin-bottom: 5px;
+        border-top: 1px solid #ccc;
+        padding-top: 5px;
+    }
+
+    .legend-icon {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+        vertical-align: middle; 
+    }
+
+    .legend-monument {
+        background-color: #ff0000;
+        border: 1.5px solid #ff0000;
+    }
+
+    .legend-interest {
+        background-color: #3399ff;
+        border: 2px solid #0055ff;
+    }
+
+  </style>
+
+</head>
+
+<body>
+  <div id="map"></div>    
+      <div id="info" class="info">
+    <b>Route Stats</b>
+    <div class="row">Total distance: Calculating...</div>
+    <div class="row">Est. time: ...</div>
+    <div class="row">Places: ...</div>
+    <div class="row">Longest leg: ...</div>
+  </div>
+  <script>
+    let map = L.map('map').setView([-29.5, 24.5], 6);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors &copy; Carto'
+    }).addTo(map);
+
+    fetch('rsa_monuments_features.json')
+      .then(function(r){ return r.json(); })
+      .then(function(geojson){
+
+        // collect coordinates for OSRM
+        let coords = [];
+        let placeCount = 0;
+
+        // Iterate through all features to collect coordinates
+        for (let i = 0; i < geojson.features.length; i++) {
+          let f = geojson.features[i];
+
+          if (f && f.geometry && f.geometry.type === 'Point') {
+            let c = f.geometry.coordinates;
+            coords.push(c[0] + ',' + c[1]);
+            placeCount += 1;
+          }
+        }
+
+        if (coords.length > 0) {
+          //coords.push(coords[0]);
+        }
+
+        let url = 'https://router.project-osrm.org/trip/v1/driving/' + coords.join(';') + '?roundtrip=true&source=any&destination=any&geometries=geojson&overview=full';
+        //let url = 'https://router.project-osrm.org/route/v1/driving/' + coords.join(';') + '?overview=full&geometries=geojson';
+
+        fetch(url)
+          .then(function(r){ return r.json(); })
+          .then(function(data){
+
+            //draw trip first 
+            if (data && data.trips && data.trips.length > 0) {
+              let route = data.trips[0];
+              let geom = route.geometry;
+
+              L.geoJSON(geom, {
+                style: function(){ return { color: '#00ffff', weight: 4, opacity: 0.8 }; }
+              }).addTo(map);
+              
+              //update info panel with stats
+              let dist = (route.distance / 1000).toFixed(1) + ' km';
+              let hrs = Math.floor(route.duration / 3600);
+              let mins = Math.round((route.duration % 3600) / 60);
+              let dur = hrs + ' h ' + mins + ' min';
+              let longest = 0;
+
+              if (route.legs && route.legs.length) {
+                for (let j = 0; j < route.legs.length; j++) {
+                  if (route.legs[j].distance > longest) longest = route.legs[j].distance;
+                }
+              }
+
+              let infoEl = document.getElementById('info');
+
+              if (infoEl) {
+                infoEl.innerHTML =
+                  '<b>Route Stats</b>' +
+                  '<div class="row">Total distance: ' + dist + '</div>' +
+                  '<div class="row">Est. time: ' + dur + '</div>' +
+                  '<div class="row">Places: ' + placeCount + '</div>' +
+                  '<div class="row">Longest leg: ' + (longest / 1000).toFixed(1) + ' km</div>' +
+                  '<div class="legend-title">Point Styles</div>' +
+                  '<div><span class="legend-icon legend-monument"></span> Monuments</div>' +
+                  '<div><span class="legend-icon legend-interest"></span> Other Sites</div>';
+              }
+            }
+
+            let layer = L.geoJSON(geojson, {
+              pointToLayer: function(feature, latlng) {
+                if (feature.properties.category) {
+                  return L.circleMarker(latlng, {
+                      radius: 7,
+                      color: '#0055ff',
+                      weight: 2,
+                      fillColor: '#3399ff',
+                      fillOpacity: 0.8
+                  });
+
+                } else {
+                    return L.circleMarker(latlng, {
+                      radius: 6,
+                      color: '#ff0000',
+                      weight: 1.5,
+                      fillColor: '#ff0000',
+                      fillOpacity: 0.85
+                    });
+                }
+              },
+
+              onEachFeature: function(feature, marker) {
+                let name = feature.properties && feature.properties.name ? feature.properties.name : '';
+                let desc = feature.properties && feature.properties.description ? feature.properties.description : '';
+                let category = feature.properties && feature.properties.category ? '<br> **Category:** ' + feature.properties.category : '';
+                marker.bindPopup('<b>' + name + '</b>' + category + (desc ? '<br>' + desc : ''));
+              }
+            }).addTo(map);
+
+            if (layer && layer.bringToFront) { layer.bringToFront(); }
+            map.fitBounds(layer.getBounds(), { padding: [20, 20] });
+          });
+      });
+  </script>
+</body>
+</html>
