@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Day 3 - SA Polygons</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/osmtogeojson@2.2.12/osmtogeojson.js"></script>
+
+    <style>
+        html, body, #map {
+            height: 100%;
+            margin: 0;
+        }
+        /* Custom CSS for Legend */
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+        }
+        .info h4 {
+            margin: 0 0 5px;
+            color: #777;
+        }
+        .legend i {
+            width: 18px;
+            height: 18px;
+            margin-right: 8px;
+            opacity: 0.9;
+            display: inline-block; 
+            vertical-align: middle;
+        }
+        .legend-item {
+            clear: both;
+            line-height: 18px;
+            margin-bottom: 3px;
+        }
+        
+        /* Adjustments for stacking controls */
+        .leaflet-top.leaflet-left .legend {
+            margin-top: 100px; /* Ensures the custom legend sits below the default layer control */
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <script>
+        const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+        const COUNTRY_AREA_QUERY = 'area["name"="South Africa"]["boundary"="administrative"]->.a;'; 
+
+        let protectedAreasLayer = null;
+        let provincesLayer = null;
+        let marineProtectedAreasLayer = null;
+        // Drakensberg variable removed
+
+        const map = L.map('map').setView([-29.5, 24.5], 6);
+
+        // --- Base Map Layer (Satellite Imagery) ---
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles © Esri',
+            maxZoom: 19
+        }).addTo(map);
+
+        // --- 1. Styling Functions ---
+        
+        function styleProtectedArea() {
+            return { color: '#006400', weight: 2, fillColor: '#3CB371', fillOpacity: 0.4 };
+        }
+
+        function styleProvince() {
+            return { color: '#DAA520', weight: 2, opacity: 0.9, fillColor: '#DAA520', fillOpacity: 0.3, dashArray: null };
+        }
+
+        function styleMarineProtectedArea() {
+            return { 
+                color: '#1E90FF', 
+                weight: 3,        
+                opacity: 1.0,      
+                fillColor: '#87CEEB',
+                fillOpacity: 0.95
+            };
+        }
+
+        // styleDrakensberg() function removed
+        
+        function createPopup(tags, featureType) {
+            const name = tags.name || tags['name:en'] || `Unnamed ${featureType}`;
+            const type = tags.leisure || tags.boundary || tags.admin_level || tags.protection_title || featureType;
+            return `<b>${name}</b><br>Type: ${type.replace(/_/g, ' ')}`;
+        }
+
+
+        function fitMapToLayers() {
+            const combinedBounds = new L.LatLngBounds();
+
+            // References to drakensbergLayer removed here
+            [provincesLayer, protectedAreasLayer, marineProtectedAreasLayer].forEach(layer => {
+                if (layer) {
+                    const bounds = layer.getBounds();
+                    if (bounds.isValid()) combinedBounds.extend(bounds);
+                }
+            });
+
+            if (combinedBounds.isValid() && combinedBounds.getNorthEast()) {
+                map.fitBounds(combinedBounds, { padding: [20, 20] });
+            }
+        }
+
+        // --- 2. Data Fetching Functions ---
+
+        function fetchProvincialBoundaries() {
+            const query = '[out:json][timeout:180];' + COUNTRY_AREA_QUERY + '(relation["admin_level"="4"](area.a););out geom;';
+            return fetch(OVERPASS_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: `data=${encodeURIComponent(query)}` })
+            .then(res => res.json()).then(data => {
+                return L.geoJson(osmtogeojson(data), { style: styleProvince, pointToLayer: (feature, latlng) => L.marker(latlng, { opacity: 0 }), filter: f => f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon', onEachFeature: (feature, layer) => { if (feature.properties?.tags) { layer.bindPopup(createPopup(feature.properties.tags, 'Province')); } } });
+            }).catch(err => { console.error('Error fetching provincial boundary data:', err); return null; });
+        }
+
+
+        function fetchProtectedAreas() {
+            const query = '[out:json][timeout:180];' + COUNTRY_AREA_QUERY +
+                '(relation["leisure"="nature_reserve"](area.a);relation["boundary"="national_park"](area.a););out geom;';
+            return fetch(OVERPASS_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: 'data=' + encodeURIComponent(query) })
+            .then(res => res.json()).then(osm => {
+                return L.geoJson(osmtogeojson(osm), { style: styleProtectedArea, pointToLayer: (feature, latlng) => L.marker(latlng, { opacity: 0 }), filter: f => f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon', onEachFeature: (feature, layer) => { if (feature.properties?.tags) { layer.bindPopup(createPopup(feature.properties.tags, 'Protected Area')); } } });
+            }).catch(err => { console.error("Error fetching Protected Area data:", err); return null; });
+        }
+
+        function fetchMarineProtectedAreas() {
+            const query = `[out:json][timeout:180];${COUNTRY_AREA_QUERY}(rel["boundary"="protected_area"]["protection_title"="Marine Protected Area"](area.a);rel["boundary"="protected_area"]["protect_class"="31"](area.a););out geom;`;
+
+            return fetch(OVERPASS_URL, {
+                method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: 'data=' + encodeURIComponent(query)
+            })
+            .then(res => res.json())
+            .then(osm => {
+                const gj = osmtogeojson(osm);
+                return L.geoJson(gj, {
+                    style: styleMarineProtectedArea, pointToLayer: (feature, latlng) => L.marker(latlng, { opacity: 0 }), filter: f => f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon', onEachFeature: (feature, layer) => { if (feature.properties?.tags) { layer.bindPopup(createPopup(feature.properties.tags, 'Marine Protected Area')); } }
+                });
+            })
+            .catch(err => { console.error("Error fetching Marine Protected Area data:", err); return null; });
+        }
+
+        // fetchDrakensbergEscarpment() function removed
+        
+        // --- 3. Legend Function (Updated - Drakensberg item removed) ---
+        function addLegend() {
+            var legend = L.control({ position: 'topleft' });
+            
+            legend.onAdd = function (map) {
+                var div = L.DomUtil.create('div', 'info legend');
+                div.innerHTML = '<h4>Map Layers</h4>';
+                
+                // Helper to create the structured legend item
+                const createLegendItem = (color, border, label) => {
+                    return `<div class="legend-item"><i style="background:${color}; border: 1px solid ${border};"></i> ${label}</div>`;
+                }
+                
+                // Only the original three items remain
+                div.innerHTML += createLegendItem('#87CEEB', '#003366', 'Marine Protected Areas');
+                div.innerHTML += createLegendItem('#3CB371', '#006400', 'Land Protected Areas');
+                div.innerHTML += createLegendItem('#DAA520', '#DAA520', 'Provincial Boundaries');
+                // Drakensberg legend item removed
+                
+                return div;
+            };
+
+            legend.addTo(map);
+        }
+
+
+        // --- 4. Execution and Layer Control (Updated) ---
+
+        Promise.all([
+            fetchProvincialBoundaries(),
+            fetchProtectedAreas(),
+            fetchMarineProtectedAreas()
+            // fetchDrakensbergEscarpment() call removed
+        ])
+        // Removed drakensberg from the destructuring
+        .then(([provinces, protectedAreas, marineProtectedAreas]) => {
+            
+            // Add layers to map
+            if (marineProtectedAreas) {
+                marineProtectedAreasLayer = marineProtectedAreas.addTo(map);
+            }
+            if (provinces) {
+                provincesLayer = provinces.addTo(map);
+            }
+            if (protectedAreas) {
+                protectedAreasLayer = protectedAreas.addTo(map);
+            }
+            // Drakensberg layer addition removed
+            
+            fitMapToLayers();
+
+            // Setup Layer Control
+            const baseMaps = { "Satellite Imagery": satelliteLayer };
+            const overlayMaps = {
+                "🌊 Marine Protected Areas": marineProtectedAreasLayer,
+                // Drakensberg line removed
+                "🗺️ Provincial Boundaries": provincesLayer,
+                "🌳 Land Protected Areas": protectedAreasLayer
+            };
+
+            L.control.layers(baseMaps, overlayMaps, {position: 'topleft'}).addTo(map);
+            
+            // Add the custom legend
+            addLegend();
+        });
+
+    </script>
+</body>
+</html>
