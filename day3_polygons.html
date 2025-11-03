@@ -57,7 +57,6 @@
         let protectedAreasLayer = null;
         let provincesLayer = null;
         let marineProtectedAreasLayer = null;
-        // Drakensberg variable removed
 
         const map = L.map('map').setView([-29.5, 24.5], 6);
 
@@ -86,8 +85,6 @@
                 fillOpacity: 0.95
             };
         }
-
-        // styleDrakensberg() function removed
         
         function createPopup(tags, featureType) {
             const name = tags.name || tags['name:en'] || `Unnamed ${featureType}`;
@@ -99,7 +96,6 @@
         function fitMapToLayers() {
             const combinedBounds = new L.LatLngBounds();
 
-            // References to drakensbergLayer removed here
             [provincesLayer, protectedAreasLayer, marineProtectedAreasLayer].forEach(layer => {
                 if (layer) {
                     const bounds = layer.getBounds();
@@ -147,10 +143,8 @@
             })
             .catch(err => { console.error("Error fetching Marine Protected Area data:", err); return null; });
         }
-
-        // fetchDrakensbergEscarpment() function removed
         
-        // --- 3. Legend Function (Updated - Drakensberg item removed) ---
+        // --- 3. Legend Function ---
         function addLegend() {
             var legend = L.control({ position: 'topleft' });
             
@@ -163,11 +157,9 @@
                     return `<div class="legend-item"><i style="background:${color}; border: 1px solid ${border};"></i> ${label}</div>`;
                 }
                 
-                // Only the original three items remain
                 div.innerHTML += createLegendItem('#87CEEB', '#003366', 'Marine Protected Areas');
                 div.innerHTML += createLegendItem('#3CB371', '#006400', 'Land Protected Areas');
                 div.innerHTML += createLegendItem('#DAA520', '#DAA520', 'Provincial Boundaries');
-                // Drakensberg legend item removed
                 
                 return div;
             };
@@ -176,15 +168,13 @@
         }
 
 
-        // --- 4. Execution and Layer Control (Updated) ---
+        // --- 4. Execution and Layer Control ---
 
         Promise.all([
             fetchProvincialBoundaries(),
             fetchProtectedAreas(),
             fetchMarineProtectedAreas()
-            // fetchDrakensbergEscarpment() call removed
         ])
-        // Removed drakensberg from the destructuring
         .then(([provinces, protectedAreas, marineProtectedAreas]) => {
             
             // Add layers to map
@@ -197,7 +187,6 @@
             if (protectedAreas) {
                 protectedAreasLayer = protectedAreas.addTo(map);
             }
-            // Drakensberg layer addition removed
             
             fitMapToLayers();
 
@@ -205,7 +194,6 @@
             const baseMaps = { "Satellite Imagery": satelliteLayer };
             const overlayMaps = {
                 "🌊 Marine Protected Areas": marineProtectedAreasLayer,
-                // Drakensberg line removed
                 "🗺️ Provincial Boundaries": provincesLayer,
                 "🌳 Land Protected Areas": protectedAreasLayer
             };
