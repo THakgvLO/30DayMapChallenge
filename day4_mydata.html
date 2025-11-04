@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>African Global Air Connectivity</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+    
+    <style>
+        html, body, #map { height: 100%; margin: 0; background: #000; }
+        .leaflet-control-container { z-index: 10000; }
+
+        #control-box { 
+            position: absolute; top: 10px; right: 10px; z-index: 1000; 
+            background: rgba(0,0,0,0.85); color: #fff; padding: 15px; 
+            border-radius: 8px; max-height: 90%; overflow-y: auto; 
+            width: 300px; 
+            font-family: sans-serif;
+        }
+        
+        h3 { 
+            margin-top: 0;
+            color: #66B3FF; 
+            border-bottom: 2px solid #66B3FF;
+            padding-bottom: 5px;
+        }
+        h4 { 
+            margin-top: 20px;
+            margin-bottom: 5px;
+            color: #e0e0e0;
+            font-size: 1.0em; 
+            border-bottom: 1px solid #555555;
+            padding-bottom: 2px;
+        }
+        #analytics-box p { margin: 5px 0; font-size: 0.9em; }
+        
+        .rank-list { list-style-type: none; padding-left: 0; margin-top: 5px;}
+        .rank-list li { margin-bottom: 2px; font-size: 0.85em; }
+
+        .filter-label { 
+            display: flex; align-items: center; margin-bottom: 5px; 
+            cursor: pointer; padding: 3px; border-radius: 3px;
+            transition: background 0.2s;
+        }
+        .filter-label:hover { background: rgba(255,255,255,0.1); }
+        .filter-dot { height: 10px; width: 10px; border-radius: 50%; margin-right: 8px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="control-box">
+        <h3>African Air Connectivity Analysis</h3>
+        
+        <div id="analytics-box" style="margin-bottom: 15px; border-bottom: 1px solid #444; padding-bottom: 10px;">
+            <h4>Connectivity Overview:</h4>
+            <p id="total-flights">Total Flights: loading...</p>
+            <p id="africa-global-count">Africa Global Routes: loading...</p>
+            
+            <h4>Top 5 African Origin Airports (Total Flights):</h4>
+            <ul id="top-countries" class="rank-list">loading...</ul>
+            
+            <h4>Africa Region Global Rank (by Outer-Continent Flights):</h4>
+            <ul id="region-rank" class="rank-list">loading...</ul>
+        </div>
+        
+        <div id="legend-box">
+            <h4>Filter by Flight Type:</h4>
+            <div id="type-filters"></div>
+            
+            <h4>Filter by African Origin Region:</h4>
+            <div id="region-filters"></div>
+        </div>
+    </div>
+    
+    <script>
+        //GLOBAL CONFIGURATION & SETUP
+        
+        // Configs for Great Circle Arc calculation and animation speed
+        const maxSegmentKm = 20;
+        const animationSpeedMs = 50; 
+        const AF_REGIONS = ["Southern", "North", "East", "West"];
+
+        let map = L.map('map').setView([10, 20], 3); 
+        
+        let allFlightData = null;
+        let currentLineLayer = null;
+        let currentAirportLayer = null;
+        let dotIntervals = []; 
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors &copy; Carto'
+        }).addTo(map);
+
+        const colorMap = {
+            // African Regions (used for Airport Points and Line Hover)
+            "Southern": '#FFCC66', // Muted Gold/Yellow
+            "North": '#66B3FF',    // Lighter Blue
+            "East": '#FF8C66',     // Soft Salmon
+            "West": '#7CFC00',     // Lawn Green
+            "Europe": '#A9A9A9',   // Light Gray
+            "Outer-Continent": '#FFFFFF', // White for external destinations (points)
+            
+            // Flight Type Visuals (for coloring lines)
+            "INTRA-REGIONAL": '#5555FF',  // Light Blue/Violet
+            "INTER-REGIONAL": '#FFCC66',  // Muted Gold/Yellow
+            "OUTER-CONTINENT": '#FF0000'  // Muted Red/Maroon
+        };
+        
+        function getColor(key) {
+            return colorMap[key] || '#FFFFFF';
+        }
+        
+        // Global filter state (controls which features are displayed)
+        const filterState = {
+            'INTRA-REGIONAL': true,
+            'INTER-REGIONAL': true,
+            'OUTER-CONTINENT': true,
+
+            'Southern': true,
+            'North': true,
+            'East': true,
+            'West': true
+        };
+
+        //CORE VISUALIZATION FUNCTIONS
+
+        function clearAnimation() {
+            dotIntervals.forEach(clearInterval);
+            dotIntervals = [];
+            map.eachLayer(function(layer) {
+                if (layer.options && layer.options.isDot) { 
+                    map.removeLayer(layer);
+                }
+            });
+        }
+
+        function animateLines(lineLayer, intervalMs) {
+            clearAnimation(); 
+            if (!lineLayer) return;
+            
+            lineLayer.eachLayer(function(line){
+                const feature = line.feature;
+
+                if (!feature || feature.geometry.type !== 'LineString') return;
+                
+                const ll = line.getLatLngs(); // LatLngs from the drawn Great Circle arc
+
+                const lineColor = line.options.color || '#ffffff';
+
+                const isOuterContinent = feature.properties.type === 'OUTER-CONTINENT';
+                const dotColor = isOuterContinent ? '#FFFFFF' : lineColor;
+                
+                // Create a small circle marker (the dot)
+                let dot = L.circleMarker(ll[0], {
+                    radius: 1.3,
+                    color: dotColor,
+                    weight: 0,
+                    fillColor: dotColor,
+                    fillOpacity: 0.95,
+                    isDot: true 
+                }).addTo(map);
+
+                // Set up the interval to move the dot along the line coordinates
+                let i = 0;
+                let intervalId = setInterval(function(){
+                    i = i + 1;
+                    if (i >= ll.length) i = 0; // Loop the animation
+                    dot.setLatLng(ll[i]);
+                }, intervalMs);
+                
+                dotIntervals.push(intervalId); 
+            });
+        }
+
+        function drawMap(dataToDraw) {
+            if (currentLineLayer) map.removeLayer(currentLineLayer);
+            if (currentAirportLayer) map.removeLayer(currentAirportLayer);
+            clearAnimation();
+
+            let gc = { "type": "FeatureCollection", "features": [] }; // Great Circle Arcs (Lines)
+            let airports = { "type": "FeatureCollection", "features": [] }; // Points
+
+            // Process features: create Great Circle arcs for lines, collect points
+            for (let f of dataToDraw.features) {
+                if (!f.geometry) continue;
+                
+                if (f.geometry.type === 'LineString' && f.properties.from && f.properties.to) {
+                    let start = turf.point(f.geometry.coordinates[0]);
+                    let end = turf.point(f.geometry.coordinates[1]);
+                    let distKm = turf.distance(start, end, { units: 'kilometers' });
+                    
+                    // Calculate number of segments for a smooth Great Circle line
+                    let npoints = Math.max(2, Math.ceil(distKm / maxSegmentKm));
+                    let arc = turf.greatCircle(start, end, { npoints: npoints, properties: f.properties });
+                    gc.features.push(arc);
+                } 
+                else if (f.geometry.type === 'Point') {
+                    airports.features.push(f);
+                }
+            }
+
+            // --- 1. Draw Flight Lines ---
+            currentLineLayer = L.geoJSON(gc, {
+                style: (feature) => {
+                    const type = feature.properties.type;
+                    
+                    const weight = (type === 'OUTER-CONTINENT') ? 1.5 : 1.2;
+                    const opacity = (type === 'OUTER-CONTINENT') ? 0.8 : 0.7;
+                    
+                    return { 
+                        color: getColor(type),
+                        weight: weight, 
+                        opacity: opacity 
+                    };
+                },
+                onEachFeature: (feature, layer) => {
+                    if (feature.properties && feature.properties.from) {
+                        layer.bindPopup(`
+                            <b>${feature.properties.from} → ${feature.properties.to}</b><br>
+                            Type: ${feature.properties.type}<br>
+                            From Region: ${feature.properties.region}
+                        `);
+                    }
+                }
+            }).addTo(map);
+
+            // --- 2. Draw Airport Points ---
+            currentAirportLayer = L.geoJSON(airports, {
+                pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+                    radius: 3.5,
+                    color: '#FFFFFF', 
+                    weight: 0.5,
+                    fillColor: getColor(feature.properties.region), 
+                    fillOpacity: 0.9
+                }),
+                onEachFeature: (feature, layer) => {
+                    if (feature.properties && feature.properties.name) {
+                        const regionDisplay = feature.properties.region
+                                            ? 'Region: $feature.properties.region}'
+                                            : 'Region: Not Specified';
+                        layer.bindPopup(`
+                            <b>Airport: ${feature.properties.name}</b><br>
+                            ${regionDisplay}
+                        `);
+                    }
+                }
+            }).addTo(map);
+
+            if (currentAirportLayer.bringToFront) currentAirportLayer.bringToFront();
+            
+            map.fitBounds([[35, -20], [-35, 55]], {padding: [50, 50]});
+
+            animateLines(currentLineLayer, animationSpeedMs);
+        }
+        
+        //ANALYTICS AND UI FUNCTIONS
+        function runAnalytics(data, flightLinesOnly) {
+            const flightFeatures = flightLinesOnly.features;
+            const totalFlights = flightFeatures.length;
+            
+            const analysis = flightFeatures.reduce((acc, flight) => {
+                const region = flight.properties.region;
+                const type = flight.properties.type;
+                const fromAirport = flight.properties.from;
+
+                // Region Totals (for African regions only)
+                if (AF_REGIONS.includes(region)) {
+                    acc.regions[region] = acc.regions[region] || { total: 0, outerContinent: 0 };
+                    acc.regions[region].total += 1;
+                    if (type === 'OUTER-CONTINENT') {
+                        acc.regions[region].outerContinent += 1;
+                        acc.totalOuterContinent += 1;
+                    }
+                }
+                
+                acc.airportFlights[fromAirport] = (acc.airportFlights[fromAirport] || 0) + 1;
+                acc.totalByType[type] = (acc.totalByType[type] || 0) + 1;
+
+                return acc;
+            }, { 
+                regions: {}, 
+                airportFlights: {},
+                totalByType: {}, 
+                totalOuterContinent: 0,
+            });
+            
+            // --- Map IATA codes to full airport names ---
+            const airportNames = data.features
+                .filter(f => f.geometry.type === 'Point')
+                .reduce((map, f) => {
+                    const match = f.properties.name.match(/\(([A-Z]{3})\)/);
+                    if (match) {
+                        map[match[1]] = f.properties.name.replace(/\s*\([A-Z]{3}\)$/, '');
+                    }
+                    return map;
+                }, {});
+
+            // --- Calculate Rankings ---
+            
+            // 1. Top 5 Airports
+            const topAirports = Object.entries(analysis.airportFlights)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 5)
+                .map(([iata, count]) => ({ 
+                    name: airportNames[iata] || iata, 
+                    count 
+                }));
+            
+            // 2. Region Global Rank (sorted by Outer-Continent flights)
+            const regionRank = Object.entries(analysis.regions)
+                .filter(([region]) => AF_REGIONS.includes(region))
+                .sort(([, a], [, b]) => b.outerContinent - a.outerContinent)
+                .map(([region, counts]) => ({ 
+                    region: region, 
+                    count: counts.outerContinent,
+                    total: counts.total
+                }));
+            
+            // --- Update the Analytics Box HTML ---
+            document.getElementById('total-flights').innerHTML = `Total Flights: <b>${totalFlights}</b>`;
+            document.getElementById('africa-global-count').innerHTML = `Africa Global Routes: <b>${analysis.totalOuterContinent}</b>`;
+
+            const topCountriesList = document.getElementById('top-countries');
+            topCountriesList.innerHTML = topAirports.map(a => 
+                `<li>${a.name} (${a.count} flights)</li>`
+            ).join('');
+
+            const regionRankList = document.getElementById('region-rank');
+            regionRankList.innerHTML = regionRank.map(r => 
+                `<li><b>${r.region}</b>: ${r.count} global routes (${r.total} total)</li>`
+            ).join('');
+
+            return analysis;
+        }
+        
+        /**
+         * Filters the global flight data based on the current `filterState` and redraws the map.
+         */
+        function updateMapFilter() {
+            if (!allFlightData) return;
+            
+            const filteredFeatures = allFlightData.features.filter(f => {
+            if (f.geometry.type === 'Point') {
+                return true; 
+            } 
+
+            else if (f.geometry.type === 'LineString' && f.properties.type) {
+                const typeMatch = filterState[f.properties.type];
+
+                if (AF_REGIONS.includes(f.properties.region)) {
+                    const regionMatch = filterState[f.properties.region];
+                    return typeMatch && regionMatch;
+                } else {
+                    return typeMatch; 
+                }
+            }
+            return false;
+            });
+
+            const filteredData = { "type": "FeatureCollection", "features": filteredFeatures };
+
+            // RUN ANALYTICS ON FILTERED DATA
+            const flightLinesOnly = {
+                "type": "FeatureCollection", 
+                "features": filteredFeatures.filter(f => f.geometry.type === 'LineString')
+            };
+            runAnalytics(filteredData, flightLinesOnly);
+
+            drawMap({ "type": "FeatureCollection", "features": filteredFeatures });
+        }
+
+        function createLegendAndFilter(analytics) {
+            // 1. Filter by Flight Type
+            const typeContainer = document.getElementById('type-filters');
+            typeContainer.innerHTML = '';
+            
+
+            ['OUTER-CONTINENT', 'INTER-REGIONAL', 'INTRA-REGIONAL'].forEach(type => {
+                const count = analytics.totalByType[type] || 0;
+                const label = document.createElement('label');
+                label.className = 'filter-label';
+                label.style.color = getColor(type);
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = filterState[type];
+                checkbox.onclick = () => {
+                    filterState[type] = checkbox.checked;
+                    updateMapFilter();
+                };
+                
+                const typeDisplay = type.replace(/-/g, ' ');
+                label.appendChild(checkbox);
+                label.appendChild(document.createTextNode(`${typeDisplay} (${count})`));
+                typeContainer.appendChild(label);
+            });
+            
+            // 2. Filter by African Region (for Points/Originating Lines)
+            const regionContainer = document.getElementById('region-filters');
+            regionContainer.innerHTML = '';
+            
+            AF_REGIONS.forEach(region => {
+                const label = document.createElement('label');
+                label.className = 'filter-label';
+                label.style.color = getColor(region);
+                
+                // Colored dot indicator
+                const dot = document.createElement('span');
+                dot.className = 'filter-dot';
+                dot.style.backgroundColor = getColor(region);
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = filterState[region];
+                checkbox.onclick = () => {
+                    filterState[region] = checkbox.checked;
+                    updateMapFilter();
+                };
+                
+                label.appendChild(checkbox);
+                label.appendChild(dot);
+                label.appendChild(document.createTextNode(`${region} Africa`));
+                regionContainer.appendChild(label);
+            });
+        }
+
+
+        //MAIN EXECUTION - DATA LOADING AND INITIALIZATION
+
+        fetch('day4_mydata_all.geojson')
+            .then(r => {
+                if (!r.ok) {
+                  throw new Error(`HTTP error! status: ${r.status}`);
+                }
+                return r.json();
+            })
+            .then(data => {
+                allFlightData = data;
+
+                const initialLines = {
+                    "type": "FeatureCollection", 
+                    "features": data.features.filter(f => f.geometry.type === 'LineString')
+                };
+                const analytics = runAnalytics(data, initialLines);
+                createLegendAndFilter(analytics);
+                drawMap(data); 
+            })
+            .catch(error => {
+                console.error('Error loading GeoJSON:', error);
+                document.getElementById('analytics-box').innerHTML = '<p style="color:red;">Error loading flight data. Please ensure day4_mydata_all.geojson is in the same directory.</p>';
+            });
+    </script>
+</body>
+</html>
