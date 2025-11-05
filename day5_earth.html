@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Day 5 Earth - Red Sea–Afar–East African Rift System</title>
+    <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/dark/main.css" />
+    <script src="https://js.arcgis.com/4.29/"></script>
+    <style>
+        html, body, #viewDiv { height: 100%; margin: 0; background:#0a0a0a; }
+
+        .poster {
+            position:absolute; top:30px; right:30px;
+            text-align:right; color:#e9e6e3; letter-spacing:.08em;
+            font-family: ui-serif, Georgia, "Times New Roman", serif;
+            pointer-events:none;
+            text-shadow: 0 0 6px rgba(0,0,0,.6);
+        }
+        .poster h1 { margin:0; font-weight:600; font-size:32px; }
+        .poster h2 { margin:.2rem 0 0; font-weight:300; font-size:13px; opacity:.85; }
+        .poster small { display:block; margin-top:.4rem; font-size:11px; opacity:.7; }
+
+        .panel {
+            position: absolute;
+            top: 90px;
+            left: 20px;
+            background: rgba(30, 30, 30, 0.9);
+            color: #e9e6e3;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: sans-serif;
+            max-width: 300px;
+            z-index: 10;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+        .panel h3 { margin-top: 0; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 5px; }
+        .panel label { display: block; margin-bottom: 5px; cursor: pointer; }
+        .panel input[type="checkbox"] { margin-right: 5px; }
+        
+        .panel .color-box {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 1px solid rgba(255,255,255,0.4);
+            vertical-align: middle;
+            margin-right: 5px;
+            border-radius: 3px;
+        }
+
+        .panel .filter-section, .panel .stats-section {
+            margin-top: 15px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+            padding-top: 10px;
+        }
+
+        .panel input[type="range"] { width: 100%; margin-top: 5px; }
+        .panel p { margin: 5px 0; font-size: 14px; }
+        .panel ul { list-style: none; padding: 0; margin: 5px 0; }
+        .panel ul li { margin-bottom: 3px; font-size: 13px; }
+
+        .highlight-label {
+            background-color: rgba(0, 255, 255, 0.1);
+            padding: 5px;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+        }
+
+        .highlight-label input[type="checkbox"] {
+            margin-left: 0.5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="viewDiv"></div>
+
+    <div id="poster" class="poster">
+        <h2>RED SEA–AFAR–EAST AFRICAN RIFT SYSTEM (RSEARS)</h2>
+        <h1 id="poster-region">Visualizing Rifting: Main (Continental) and Extended Zones</h1>
+        <h2 id="poster-info">Extended Rift: Southern (Dark Red) & Northern (Dark Green)</h2>
+        <small>#30DayMapChallenge · Data: USGS ComCat</small>
+    </div>
+
+    <div id="controlPanel" class="panel">
+        <h3>Layer Visibility</h3>
+        <label class="highlight-label"><input type="checkbox" id="toggleAfricanRift"><span class="color-box" style="background-color:#00FFFF;"></span> Continental African Rift</label>
+        <hr style="border-top: 1px solid rgba(0, 255, 255, 0.4); margin: 5px 0;">
+        <label><input type="checkbox" id="toggleSouthExtended" checked><span class="color-box" style="background-color:#8B0000;"></span> Southern Extended Rift</label>
+        <label><input type="checkbox" id="toggleSouthMain" checked><span class="color-box" style="background-color:#B22222;"></span> Southern Main Rift</label>
+        <label><input type="checkbox" id="toggleNorthMain" checked><span class="color-box" style="background-color:#00FF00;"></span> Northern Main Rift</label>
+        <label><input type="checkbox" id="toggleNorthExtended" checked><span class="color-box" style="background-color:#006400;"></span> Northern Extended Rift</label>
+
+        <div class="filter-section">
+            <h3>Filter Earthquakes</h3>
+            <label for="minMagnitude">Min. Magnitude: <span id="magValue">3.0</span></label>
+            <input type="range" id="minMagnitude" min="0" max="8" step="0.1" value="3.0">
+        </div>
+
+        <div class="stats-section">
+            <h3>Statistics</h3>
+            <p>Total Earthquakes: <span id="totalQuakes">0</span></p>
+            <ul>
+                <li>Continental Rift (Cyan): <span id="statsAfricanRift">0</span></li>
+                <hr style="border-top: 1px dotted rgba(255,255,255,0.2); margin: 3px 0;">
+                <li>Southern Extended: <span id="statsSouthExtended">0</span></li>
+                <li>Southern Main: <span id="statsSouthMain">0</span></li>
+                <li>Northern Main: <span id="statsNorthMain">0</span></li>
+                <li>Northern Extended: <span id="statsNorthExtended">0</span></li>
+            </ul>
+            <p>Largest Magnitude: <span id="largestMag">N/A</span></p>
+            <p>Smallest Magnitude: <span id="smallestMag">N/A</span></p>
+        </div>
+    </div>
+
+    <script>
+    require([
+        "esri/Map",
+        "esri/views/MapView",
+        "esri/layers/GeoJSONLayer",
+        "esri/layers/TileLayer",
+        "esri/request",
+        "esri/geometry/support/webMercatorUtils"
+    ], function(Map, MapView, GeoJSONLayer, TileLayer, esriRequest, webMercatorUtils){
+
+        // --- 🔧 GLOBAL SETTINGS ------------------
+        const config = {
+            initialCenter: [37.0, 5.0],        
+            initialZoom: 3.5,                  
+            minMag: 3.0,                       
+            maxFeatures: 20000,
+            startTime: "1960-01-01",           
+            endTime: "NOW",
+            bloomStrength: 1.5 
+        };
+        // -------------------------------------------------
+
+        // --- Poster auto-update ---
+        const posterInfo = document.getElementById("poster-info");
+        const magValueSpan = document.getElementById("magValue");
+
+        function updatePosterInfo(minMag) {
+            posterInfo.textContent =
+              `Data: USGS ComCat (${config.startTime.slice(0,4)} – ${config.endTime} · M ≥ ${minMag.toFixed(1)})`;
+            magValueSpan.textContent = minMag.toFixed(1);
+        }
+        // --- Base map and view ---
+        const map = new Map({ basemap: "dark-gray-vector" });
+
+        const hillshade = new TileLayer({
+            portalItem: { id: "1b243539f4514b6ba35e7d995890db1d" },
+            opacity: 0.85,
+            blendMode: "multiply"
+        });
+        map.add(hillshade);
+
+        const view = new MapView({
+            container: "viewDiv",
+            map,
+            center: config.initialCenter,
+            zoom: config.initialZoom,
+            background: { color: [10,10,10,1] }
+        });
+
+        // Store layers and features globally
+        const layers = {};
+        let allEarthquakeFeatures = []; 
+
+        const layerDefinitions = [
+            // New Continental Rift Layer
+            { id: "toggleAfricanRift", minLat: -15, maxLat: 20, color: "#00FFFF", dotSize: 1.8, isNorthern: false },
+            // Existing Layers
+            { id: "toggleSouthExtended", minLat: -25, maxLat: -15, color: "#8B0000", dotSize: 2.0, isNorthern: false },
+            { id: "toggleSouthMain", minLat: -15, maxLat: 1, color: "#B22222", dotSize: 2.0, isNorthern: false },
+            { id: "toggleNorthMain", minLat: 1, maxLat: 20, color: "#00FF00", dotSize: 1.5, isNorthern: true },
+            { id: "toggleNorthExtended", minLat: 20, maxLat: 30, color: "#006400", dotSize: 1.5, isNorthern: true }
+        ];
+
+        // --- Function to fetch and render a layer ---
+        async function loadQuakesLayer(id, bbox, minLat, maxLat, color, dotSize, isNorthern) {
+            const currentMinMag = config.minMag;
+
+            // Define size stops dynamically
+            const baseSize = isNorthern ? 1.0 : 1.5;
+            const sizeStops = [
+                { value: currentMinMag,     size: baseSize }, 
+                { value: currentMinMag + 1.0, size: baseSize + 0.5 },
+                { value: currentMinMag + 2.0, size: baseSize + 1.5 },
+                { value: currentMinMag + 3.0, size: baseSize + 3.5 }
+            ];
+
+          const usgsUrl =
+            "https://earthquake.usgs.gov/fdsnws/event/1/query" +
+            `?format=geojson&starttime=${config.startTime}&minmagnitude=${currentMinMag}` +
+            `&minlongitude=${bbox[0]}&minlatitude=${minLat}` + 
+            `&maxlongitude=${bbox[2]}&maxlatitude=${maxLat}` + 
+            `&orderby=time&limit=${config.maxFeatures}`;
+
+          try {
+            const response = await esriRequest(usgsUrl, { responseType: "json" });
+            const geojson = response.data;
+
+            geojson.features.forEach(f => {
+                f.properties.segment = id;
+                allEarthquakeFeatures.push(f);
+            });
+
+            const isVisible = (id !== "toggleAfricanRift") ? document.getElementById(id).checked : false;
+
+            const quakesLayer = new GeoJSONLayer({
+                url: URL.createObjectURL(
+                    new Blob([JSON.stringify(geojson)], { type: "application/json" })
+                ),
+                renderer: {
+                    type: "simple",
+                    symbol: {
+                        type: "simple-marker",
+                        style: "circle",
+                        size: dotSize, 
+                        color: color,
+                        outline: { color: [0,0,0,0], width: 0 }
+                    },
+                    visualVariables: [
+                        {
+                            type: "size",
+                            field: "mag",
+                            stops: sizeStops 
+                        }
+                    ]
+                },
+                effect: `bloom(${config.bloomStrength}, 0.8px, 0) drop-shadow(0,0,2px)`,
+                blendMode: "screen",
+                id: id,
+                visible: isVisible
+            });
+
+            map.add(quakesLayer);
+            layers[id] = quakesLayer;
+
+          } catch (err) {
+            console.error(`Error fetching earthquakes (${id}):`, err);
+          }
+        }
+
+        // --- Stats Update Function ---
+        function updateStats() {
+            let total = 0;
+            let stats = {
+                "toggleAfricanRift": 0, 
+                "toggleSouthExtended": 0,
+                "toggleSouthMain": 0,
+                "toggleNorthMain": 0,
+                "toggleNorthExtended": 0
+            };
+            let largestMag = 0;
+            let smallestMag = 10; 
+
+            allEarthquakeFeatures.forEach(f => {
+                const segmentId = f.properties.segment;
+                if (layers[segmentId] && layers[segmentId].visible) {
+                    total++;
+                }
+                stats[segmentId]++;
+                if (f.properties.mag > largestMag) largestMag = f.properties.mag;
+                if (f.properties.mag < smallestMag) smallestMag = f.properties.mag;
+            });
+
+            document.getElementById("totalQuakes").textContent = total;
+            document.getElementById("statsAfricanRift").textContent = stats["toggleAfricanRift"];
+            document.getElementById("statsSouthExtended").textContent = stats["toggleSouthExtended"];
+            document.getElementById("statsSouthMain").textContent = stats["toggleSouthMain"];
+            document.getElementById("statsNorthMain").textContent = stats["toggleNorthMain"];
+            document.getElementById("statsNorthExtended").textContent = stats["toggleNorthExtended"];
+            document.getElementById("largestMag").textContent = total > 0 ? largestMag.toFixed(1) : "N/A";
+            document.getElementById("smallestMag").textContent = total > 0 ? smallestMag.toFixed(1) : "N/A";
+        }
+
+        // --- Main map loading and filtering logic ---
+        async function loadAllRiftLayers(bbox) {
+            allEarthquakeFeatures = [];
+            map.removeMany(Object.values(layers));
+            updatePosterInfo(config.minMag);
+
+            const promises = layerDefinitions.map(def => 
+                loadQuakesLayer(def.id, bbox, def.minLat, def.maxLat, def.color, def.dotSize, def.isNorthern)
+            );
+            await Promise.all(promises);
+
+            updateStats();
+        }
+
+        view.when(async function(){
+            let geoExtent = webMercatorUtils.webMercatorToGeographic(view.extent);
+            let bbox = [
+                geoExtent.xmin.toFixed(2),
+                geoExtent.ymin.toFixed(2),
+                geoExtent.xmax.toFixed(2),
+                geoExtent.ymax.toFixed(2)
+            ];
+
+            await loadAllRiftLayers(bbox);
+
+            // --- Event Listeners for controls ---
+            document.getElementById("controlPanel").addEventListener("change", async (event) => {
+                if (event.target.type === "checkbox") {
+                    const layerId = event.target.id;
+                    if (layers[layerId]) {
+                        layers[layerId].visible = event.target.checked;
+                    }
+                    updateStats();
+                }
+            });
+
+            // Add event listeners for slider drag (input) and release (change)
+            const magnitudeSlider = document.getElementById("minMagnitude");
+
+            magnitudeSlider.addEventListener("input", (event) => {
+                updatePosterInfo(parseFloat(event.target.value));
+            });
+
+            magnitudeSlider.addEventListener("change", async (event) => {
+                config.minMag = parseFloat(event.target.value);
+                await loadAllRiftLayers(bbox); 
+            });
+        });
+    });
+    </script>
+</body>
+</html>
