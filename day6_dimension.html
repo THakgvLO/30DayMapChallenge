@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <title>SA Garden Route 3D Drive</title>
+    <style>
+      html,
+      body,
+      #viewDiv {
+        height: 100%;
+        margin: 0;
+        font-family: system-ui, sans-serif;
+      }
+
+      #fps {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: rgba(0, 0, 0, 0.7);
+        color: rgb(31, 189, 189);
+        font-size: 14px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        z-index: 9999;
+      }
+
+      #replayButton {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 1000;
+        padding: 10px 15px;
+        background-color: #0079c1;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        display: none; /* Initially hidden, shown when animation is finished */
+      }
+
+      #replayDialog {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1001;
+        background-color: rgba(255, 255, 255, 0.95);
+        padding: 25px;
+        border-radius: 8px;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+        text-align: center;
+        display: none;
+      }
+      #replayDialog button {
+        padding: 10px 15px;
+        margin: 10px 5px;
+        cursor: pointer;
+      }
+    </style>
+
+    <link rel="stylesheet" href="https://js.arcgis.com/4.34/esri/themes/light/main.css" />
+    <script src="https://js.arcgis.com/4.34/"></script>
+
+    <script>
+      require(
+        [
+          "esri/Map",
+          "esri/views/SceneView",
+          "esri/layers/GeoJSONLayer",
+          "esri/layers/GraphicsLayer",
+          "esri/Graphic",
+          "esri/geometry/Polyline"
+        ],
+        (Map, SceneView, GeoJSONLayer, GraphicsLayer, Graphic, Polyline) => {
+
+          // ---------------------------------------
+          // 🔧 GLOBAL SETTINGS
+          // ---------------------------------------
+
+          const START_LON = 18.4241;
+          const START_LAT = -33.9249;
+          const START_Z   = 3200;
+
+          const CAMERA_HEADING = 55;
+          const CAMERA_TILT    = 70;
+          const CAMERA_ZOOM    = 11;
+          const CAMERA_SPEED_FACTOR = 0.6;
+
+          const CAR_SPEED_INDICES_PER_SECOND = 100;
+          const CAMERA_UPDATE_EVERY_N_FRAMES = 5;
+
+          const PLACES_OFFSET = 8;
+          const ROUTE_OFFSET  = 12;
+          const CAR_OFFSET    = 15;
+
+          const BASEMAP_ID      = "satellite";
+          const QUALITY_PROFILE = "high";
+          const CAR_COLOR = "#00FF7F";
+          const CAR_SIZE  = 15;
+
+          // ---------------------------------------
+          // Map + View
+          // ---------------------------------------
+
+          const map = new Map({
+            basemap: BASEMAP_ID,
+            ground: "world-elevation"
+          });
+
+          const view = new SceneView({
+            container: "viewDiv",
+            map,
+            // Removed camera block for controlled initial camera move
+            qualityProfile: QUALITY_PROFILE,
+            environment: {
+              atmosphereEnabled: true,
+              lighting: {
+                type: "virtual",
+                directShadowsEnabled: false
+              }
+            }
+          });
+
+          // ---------------------------------------
+          // Layers 
+          // ---------------------------------------
+
+          const placesLayer = new GeoJSONLayer({
+            url: "sa_garden_route.json",
+            elevationInfo: { mode: "relative-to-ground", offset: PLACES_OFFSET },
+            renderer: {
+              type: "simple",
+              symbol: {
+                type: "point-3d",
+                symbolLayers: [
+                  {
+                    type: "icon",
+                    resource: { primitive: "circle" },
+                    material: { color: "#d100d1" },
+                    outline: { color: "#fff", size: 1 },
+                    size: 10
+                  }
+                ],
+                verticalOffset: {
+                  screenLength: 20,
+                  minWorldLength: 20,
+                  maxWorldLength: 200
+                }
+              }
+            }
+          });
+          map.add(placesLayer);
+
+          const routeLayer = new GraphicsLayer({
+            elevationInfo: { mode: "relative-to-ground", offset: ROUTE_OFFSET }
+          });
+          map.add(routeLayer);
+
+          const carLayer = new GraphicsLayer({
+            elevationInfo: { mode: "relative-to-ground", offset: CAR_OFFSET }
+          });
+          map.add(carLayer);
+
+          // ---------------------------------------
+          // GLOBAL STATE
+          // ---------------------------------------
+
+          let carGraphic = null;
+          let animationFrameId = null; // Stores the ID from requestAnimationFrame
+          let animationStarted = false;
+          let animationFinished = false; // NEW flag for when the car reaches the end
+
+          let routeCoords = null; // Original route coordinates
+          let sceneReady  = false;
+          let currentPointIndex = 0; // Tracks the car's current position index (0 to maxIndex)
+
+          // ---------------------------------------
+          // FPS overlay
+          // ---------------------------------------
+
+          const fpsEl = document.createElement("div");
+          fpsEl.id = "fps";
+          fpsEl.textContent = "FPS: 0";
+          document.body.appendChild(fpsEl);
+
+          let fpsLast = performance.now();
+          let fpsFrames = 0;
+
+          function updateFPS(now) {
+            fpsFrames++;
+            const elapsed = now - fpsLast;
+            if (elapsed >= 1000) {
+              const fps = Math.round((fpsFrames * 1000) / elapsed);
+              fpsEl.textContent = `FPS: ${fps}`;
+              fpsFrames = 0;
+              fpsLast = now;
+            }
+          }
+
+          // ---------------------------------------
+          // REPLAY FUNCTIONS
+          // ---------------------------------------
+
+          function resetAnimation() {
+            if (animationFrameId !== null) {
+              cancelAnimationFrame(animationFrameId);
+              animationFrameId = null;
+            }
+            animationStarted = false;
+            animationFinished = false;
+            currentPointIndex = 0;
+            // Hides the car briefly until the new position is set
+            if (carGraphic) {
+              carLayer.remove(carGraphic);
+            }
+          }
+
+          // ---------------------------------------
+          // INITIAL START LOGIC (WITH 6 SEC DELAY)
+          // ---------------------------------------
+
+          function maybeStartAnimation() {
+            // The check for sceneReady and routeCoords prevents starting prematurely
+            if (sceneReady && routeCoords && !animationStarted) {
+              animationStarted = true;
+              animateCar(routeCoords);
+            }
+          }
+
+          // 1. Wait for view to load, then jump to the start point.
+          view.when().then(() => {
+            view.goTo(
+              {
+                center: [START_LON, START_LAT],
+                heading: CAMERA_HEADING,
+                zoom: CAMERA_ZOOM,
+                tilt: CAMERA_TILT
+              },
+              {
+                duration: 500 // Quick camera move
+              }
+            ).then(() => {
+              // 2. Add the fixed 6-second delay to ensure surrounding tiles/scene elements load.
+              setTimeout(() => {
+                sceneReady = true;
+                maybeStartAnimation(); // Start the car after the delay
+              }, 6000); // 6000 milliseconds = 6 seconds
+            });
+          });
+
+
+          // ---------------------------------------
+          // Build route from OSRM
+          // ---------------------------------------
+
+          fetch("sa_garden_route.json")
+            .then((r) => r.json())
+            .then((geojson) => {
+              const coords = geojson.features
+                .filter((f) => f.geometry && f.geometry.type === "Point")
+                .map((f) => f.geometry.coordinates.join(","));
+
+              if (!coords.length) return;
+
+              const url =
+                "https://router.project-osrm.org/route/v1/driving/" +
+                coords.join(";") +
+                "?overview=full&geometries=geojson";
+
+              return fetch(url)
+                .then((r) => r.json())
+                .then((data) => {
+                  if (!data || !data.routes || !data.routes.length) return;
+                  const route = data.routes[0];
+                  const lineCoords = route.geometry.coordinates;
+
+                  // --- Draw route and set car graphic (unchanged) ---
+                  const polyline = new Polyline({
+                    paths: [lineCoords.map((c) => [c[0], c[1], 0])],
+                    spatialReference: { wkid: 4326 }
+                  });
+
+                  const routeGraphic = new Graphic({
+                    geometry: polyline,
+                    symbol: {
+                      type: "line-3d",
+                      symbolLayers: [
+                        {
+                          type: "line",
+                          material: { color: "#00ffff" },
+                          size: 8
+                        }
+                      ]
+                    }
+                  });
+                  routeLayer.add(routeGraphic);
+
+                  const start = lineCoords[0];
+                  carGraphic = new Graphic({
+                    geometry: {
+                      type: "point",
+                      longitude: start[0],
+                      latitude: start[1]
+                    },
+                    symbol: {
+                      type: "point-3d",
+                      symbolLayers: [
+                        {
+                          type: "icon",
+                          resource: { primitive: "circle" },
+                          material: { color: CAR_COLOR },
+                          outline: { color: "#000000", size: 1 },
+                          size: CAR_SIZE
+                        }
+                      ],
+                      verticalOffset: {
+                        screenLength: 24,
+                        minWorldLength: 20,
+                        maxWorldLength: 200
+                      }
+                    }
+                  });
+                  carLayer.add(carGraphic);
+
+                  routeCoords = lineCoords;
+                  maybeStartAnimation();
+                });
+            })
+            .catch((err) => console.error(err));
+
+          // ---------------------------------------
+          // Camera follow helper 
+          // ---------------------------------------
+
+          function updateCameraToCar(lon, lat) {
+            view.goTo(
+              {
+                center: [lon, lat],
+                heading: CAMERA_HEADING,
+                zoom: CAMERA_ZOOM,
+                tilt: CAMERA_TILT
+              },
+              {
+                speedFactor: CAMERA_SPEED_FACTOR
+              }
+            );
+          }
+
+          // ---------------------------------------
+          // Time-based animation + follow camera
+          // ---------------------------------------
+
+          function animateCar(coords) {
+            if (!carGraphic || !coords || coords.length < 2) return;
+
+            let progress = currentPointIndex; // Start from where we were, or 0
+            const maxIndex = coords.length - 1;
+            const speed = CAR_SPEED_INDICES_PER_SECOND;
+            let lastTime = null;
+            let frameCount = 0;
+
+            // Add car graphic back if it was removed
+            if (!carLayer.graphics.includes(carGraphic)) {
+              carLayer.add(carGraphic);
+            }
+
+            function step(timestamp) {
+              updateFPS(timestamp);
+
+              if (lastTime == null) lastTime = timestamp;
+              const dt = (timestamp - lastTime) / 1000;
+              lastTime = timestamp;
+
+              progress += speed * dt;
+              currentPointIndex = progress; // Update global index
+
+              if (progress >= maxIndex) {
+                progress = maxIndex;
+                // Animation has ended
+                animationFinished = true;
+                updateCameraToCar(coords[maxIndex][0], coords[maxIndex][1]);
+                document.getElementById("replayButton").style.display = "block"; // Show Replay button
+                return;
+              }
+
+              const i = Math.floor(progress);
+              const t = progress - i;
+              const p0 = coords[i];
+              const p1 = coords[Math.min(i + 1, maxIndex)];
+
+              const lon = p0[0] + (p1[0] - p0[0]) * t;
+              const lat = p0[1] + (p1[1] - p0[1]) * t;
+
+              carGraphic.geometry = {
+                type: "point",
+                longitude: lon,
+                latitude: lat
+              };
+
+              frameCount++;
+              if (frameCount % CAMERA_UPDATE_EVERY_N_FRAMES === 0) {
+                updateCameraToCar(lon, lat);
+              }
+
+              animationFrameId = requestAnimationFrame(step);
+            }
+
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animationFrameId = requestAnimationFrame(step);
+          }
+
+          // ---------------------------------------
+          // REPLAY BUTTON HANDLERS
+          // ---------------------------------------
+
+          view.when().then(() => {
+            const replayButton = document.getElementById("replayButton");
+            const replayDialog = document.getElementById("replayDialog");
+            const startFromBeginningButton = document.getElementById("startFromBeginning");
+            const startFromEndButton = document.getElementById("startFromEnd");
+
+            // 1. Show Dialog when Replay button clicked
+            replayButton.addEventListener("click", () => {
+              replayDialog.style.display = "block";
+              replayButton.style.display = "none";
+            });
+
+            // 2. Start from Actual Beginning (Original Route)
+            startFromBeginningButton.addEventListener("click", () => {
+              replayDialog.style.display = "none";
+
+              resetAnimation(); // Stop old, clear flags
+
+              // Jump camera back to the original start point
+              view.goTo(
+                {
+                  center: [routeCoords[0][0], routeCoords[0][1]],
+                  heading: CAMERA_HEADING,
+                  zoom: CAMERA_ZOOM,
+                  tilt: CAMERA_TILT
+                },
+                { duration: 2000 } // 2 second fly-back
+              ).then(() => {
+                animateCar(routeCoords);
+                animationStarted = true;
+              });
+            });
+
+            // 3. Start from End Point (Reversed Route)
+            startFromEndButton.addEventListener("click", () => {
+              replayDialog.style.display = "none";
+
+              if (!routeCoords) return;
+
+              resetAnimation(); // Stop old, clear flags
+
+              // Reverse the coordinates array for the return trip
+              const reversedRouteCoords = routeCoords.slice().reverse();
+              const newStart = reversedRouteCoords[0]; // Original end point
+
+              // Jump camera to the new starting position (original end point)
+              view.goTo(
+                {
+                  center: [newStart[0], newStart[1]],
+                  // Adjust heading to look 'backwards' along the path
+                  heading: (CAMERA_HEADING + 180) % 360,
+                  zoom: CAMERA_ZOOM,
+                  tilt: CAMERA_TILT
+                },
+                { duration: 2000 }
+              ).then(() => {
+                // Start animation using the REVERSED coordinates
+                animateCar(reversedRouteCoords);
+                animationStarted = true;
+              });
+            });
+          });
+        }
+      );
+    </script>
+  </head>
+
+  <body>
+    <div id="viewDiv">
+      <button id="replayButton">
+        Replay Drive
+      </button>
+
+      <div id="replayDialog">
+        <h3>Select Start Point</h3>
+        <button id="startFromBeginning">
+          Start from Actual Beginning
+        </button>
+        <button id="startFromEnd">
+          Start from End Point (Reverse)
+        </button>
+      </div>
+    </div>
+  </body>
+</html>

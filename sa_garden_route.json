@@ -1,0 +1,30 @@
+{
+ "type": "FeatureCollection",
+ "name": "Western Cape Garden Route",
+ "features": [
+  { "type": "Feature",
+    "properties": { "name": "Cape Town (Start)", "description": "Table Mountain View" },
+    "geometry": { "type": "Point", "coordinates": [18.4241, -33.9249] }
+  },
+  { "type": "Feature",
+    "properties": { "name": "Hermanus", "description": "Whale Watching Capital" },
+    "geometry": { "type": "Point", "coordinates": [19.2439, -34.4069] }
+  },
+  { "type": "Feature",
+    "properties": { "name": "Mossel Bay", "description": "Diaz Museum Complex" },
+    "geometry": { "type": "Point", "coordinates": [22.1466, -34.1834] }
+  },
+  { "type": "Feature",
+    "properties": { "name": "George", "description": "Gateway to the Garden Route" },
+    "geometry": { "type": "Point", "coordinates": [22.4616, -33.9658] }
+  },
+  { "type": "Feature",
+    "properties": { "name": "Knysna Heads Viewpoint", "description": "Lagoon Entrance" },
+    "geometry": { "type": "Point", "coordinates": [23.0645, -34.0583] }
+  },
+  { "type": "Feature",
+    "properties": { "name": "Plettenberg Bay (End)", "description": "Beaches and Nature" },
+    "geometry": { "type": "Point", "coordinates": [23.3712, -34.0531] }
+  }
+ ]
+}
