@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Day 7 - Service-Centric Accessibility Profiles</title>
+
+    <link rel="stylesheet" href="https://js.arcgis.com/4.30/esri/themes/light/main.css" />
+    <script src="https://js.arcgis.com/4.30/"></script>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+    <style>
+      /* Apply Inter font family */
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+      /* Ensure the map container is flexible and fills the viewport */
+      #mapContainer {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        width: 100%;
+      }
+      
+      /* Map view should take the remaining vertical space and flex within its container */
+      #viewDiv {
+        flex-grow: 1;
+        width: 100%;
+        min-height: 50vh; /* Minimum height for smaller screens (overridden by flex on larger) */
+      }
+      
+      /* Custom styles for the legend (now placed side-by-side) */
+      #mapOverlay {
+        z-index: 10; 
+        overflow-y: auto;
+        /* Ensure legend has a minimum height on small screens */
+        min-height: 250px; 
+      }
+      
+      /* Style for the legend items */
+      .legend-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 6px;
+        font-size: 0.875rem;
+      }
+      
+      .legend-symbol {
+        width: 16px;
+        height: 16px;
+        margin-right: 8px;
+        border: 1px solid #333;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+    </style>
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  </head>
+
+  <body>
+    <div id="mapContainer">
+      <div class="bg-gray-900 text-white p-4 shadow-lg">
+        <h1 class="text-3xl font-extrabold tracking-tight">
+          Service Accessibility Analysis: Greater Pretoria
+        </h1>
+        <p class="text-sm text-gray-400 mt-1">
+          Visualizing drive-time catchment areas to critical services from key locations.
+        </p>
+      </div>
+
+      <div class="flex flex-col lg:flex-row flex-grow">
+        
+        <div id="mapOverlay" class="bg-white p-4 shadow-md border-b border-gray-200 w-full lg:w-1/3 xl:w-1/4">
+          <h2 class="text-lg font-bold mb-3 border-b pb-2 text-gray-800">Map Legend</h2>
+          
+          <div class="mb-4">
+            <h3 class="text-sm font-semibold mb-2 text-gray-700">1. Key Locations (Markers)</h3>
+            <div id="markerLegendContent">
+            </div>
+          </div>
+
+          <div class="mb-2">
+            <h3 class="text-sm font-semibold mb-2 text-gray-700">2. Drive Time Zones</h3>
+            <div id="isochroneLegendContent">
+            </div>
+          </div>
+          
+          <p id="clickMessage" class="text-xs text-gray-500 mt-3 p-2 bg-gray-50 rounded-md">
+            Click on the map to analyze the drive time from your custom location.
+          </p>
+        </div>
+        
+        <div id="viewDiv" class="flex-grow"></div>
+        
+      </div> </div>
+
+
+    <script>
+      /**************************************************************
+        * 🔑 STEP 1: Insert your ArcGIS key (for the map)
+        * 🔑 STEP 2: Insert your ORS key (for the isochrones)
+        *************************************************************/
+      
+      // PASTE YOUR WORKING ARCGIS API KEY HERE (for basemap)
+      const ARCGIS_API_KEY = "AAPTxy8BH1VEsoebNVZXo8HurLB6gFEMRvI9FqZLOngU5F0hT7eg1n-BK0sRt7WdpuN7FC2ZiVj-o9AK5tdYNh58Ss_DMEmoD8XhI3CASnXp2LB7tw5Sj51pPtTWPEuZbTrlshP9rt3B7iDw8vS5gtLgV4vW_JVAzqCTE7KALfhQZmpeFY6zClRsh7EkhnSBtZJUti4K_Yolb-YD2VxnXW7cS7EJlYQ_Mzekz0uGelkCigE.AT1_BVGOz8uF"; 
+      
+      // PASTE YOUR WORKING ORS API KEY HERE (for isochrones)
+      const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjI1Y2FiZjdmNGM2YjQ0M2NhNTk5NDQxMzRiMmJlYTdlIiwiaCI6Im11cm11cjY0In0="; 
+
+      // 1. Define the Origin Hub 
+      const originPoint = { 
+        name: "Hatfield Central Hub", 
+        lon: 28.235, 
+        lat: -25.748,
+        type: "Origin"
+      };
+
+      // 2. Define key Destinations and Services (Total 46 points)
+      const serviceLocations = [
+        // HEALTH (Red)
+        { name: "MediClinic Heart Hospital", lon: 28.2390, lat: -25.7480, type: "Health" },
+        { name: "Netcare Pretoria East", lon: 28.2868, lat: -25.7958, type: "Health" },
+        { name: "Pretoria West Hospital", lon: 28.1770, lat: -25.7510, type: "Health" },
+        { name: "Unitas Hospital", lon: 28.214, lat: -25.809, type: "Health" },
+        { name: "Muelmed Mediclinic", lon: 28.205, lat: -25.749, type: "Health" },
+        { name: "Kalafong Hospital", lon: 27.970, lat: -25.759, type: "Health" },
+        { name: "Life Eugene Marais Hospital", lon: 28.160, lat: -25.720, type: "Health" }, 
+        { name: "Zuid-Afrikaans Hospital", lon: 28.232, lat: -25.776, type: "Health" }, 
+        { name: "Steve Biko Academic Hospital", lon: 28.216, lat: -25.722, type: "Health" }, 
+        { name: "Sunninghill Hospital", lon: 28.058, lat: -25.996, type: "Health" }, 
+        { name: "Akasia Clinic", lon: 28.084, lat: -25.688, type: "Health" }, 
+        { name: "Pretoria Eye Institute", lon: 28.261, lat: -25.755, type: "Health" }, 
+        { name: "Tembisa Hospital", lon: 28.212, lat: -26.002, type: "Health" }, 
+        
+        // EDUCATION (Blue)
+        { name: "University of Pretoria (Main)", lon: 28.232, lat: -25.753, type: "Education" },
+        { name: "Pretoria Boys High School", lon: 28.23, lat: -25.765, type: "Education" },
+        { name: "Tshwane University of Technology", lon: 28.163, lat: -25.733, type: "Education" },
+        { name: "Hoërskool Waterkloof", lon: 28.245, lat: -25.811, type: "Education" },
+        { name: "CBC Mount Edmund", lon: 28.285, lat: -25.722, type: "Education" },
+        { name: "Pretoria High School for Girls", lon: 28.235, lat: -25.759, type: "Education" },
+        { name: "Unisa Main Campus", lon: 28.188, lat: -25.768, type: "Education" }, 
+        { name: "Lyttelton Manor High", lon: 28.195, lat: -25.845, type: "Education" }, 
+        { name: "Hoërskool Garsfontein", lon: 28.324, lat: -25.812, type: "Education" }, 
+        { name: "Centurion Academy", lon: 28.180, lat: -25.860, type: "Education" }, 
+        { name: "Pretoria Technical High School", lon: 28.190, lat: -25.760, type: "Education" }, 
+        { name: "St Alban's College", lon: 28.258, lat: -25.789, type: "Education" }, 
+        { name: "Midrand Graduate Institute", lon: 28.125, lat: -25.989, type: "Education" }, 
+
+        // RETAIL/SHOPS (Green)
+        { name: "Hatfield Galleries Shopping", lon: 28.235, lat: -25.755, type: "Retail" },
+        { name: "Menlyn Park Shopping Centre", lon: 28.281, lat: -25.783, type: "Retail" },
+        { name: "Brooklyn Mall", lon: 28.230, lat: -25.774, type: "Retail" },
+        { name: "Centurion Mall", lon: 28.188, lat: -25.864, type: "Retail" },
+        { name: "Wonderboom Junction", lon: 28.160, lat: -25.688, type: "Retail" },
+        { name: "Irene Village Mall", lon: 28.210, lat: -25.870, type: "Retail" }, 
+        { name: "Kolonnade Shopping Centre", lon: 28.210, lat: -25.660, type: "Retail" },
+        { name: "The Grove Mall", lon: 28.320, lat: -25.750, type: "Retail" }, 
+        { name: "Sammy Marks Square", lon: 28.192, lat: -25.748, type: "Retail" }, 
+        { name: "Mall of Africa", lon: 28.115, lat: -26.010, type: "Retail" }, 
+        { name: "Atterbury Value Mart", lon: 28.290, lat: -25.780, type: "Retail" }, 
+        
+        // PARKS/RECREATION (Purple)
+        { name: "Groenkloof Nature Reserve", lon: 28.23, lat: -25.79, type: "Parks" },
+        { name: "Magnolia Dell Park", lon: 28.225, lat: -25.765, type: "Parks" },
+        { name: "Rietvlei Nature Reserve", lon: 28.32, lat: -25.85, type: "Parks" },
+        { name: "Union Buildings Gardens", lon: 28.219, lat: -25.742, type: "Parks" },
+        { name: "Faerie Glen Nature Reserve", lon: 28.290, lat: -25.790, type: "Parks" }, 
+        { name: "Fountains Valley Resort", lon: 28.215, lat: -25.775, type: "Parks" },
+        { name: "Botanical Garden", lon: 28.250, lat: -25.743, type: "Parks" }, 
+        { name: "Church Square", lon: 28.188, lat: -25.746, type: "Parks" }, 
+        { name: "Voortrekker Monument", lon: 28.176, lat: -25.789, type: "Parks" }, 
+        { name: "Roodepoort Nature Reserve", lon: 27.873, lat: -26.173, type: "Parks" }, 
+
+        // TRANSPORT (Yellow)
+        { name: "Hatfield Gautrain Station", lon: 28.243, lat: -25.751, type: "Transport" },
+        { name: "Pretoria Station (Main)", lon: 28.188, lat: -25.756, type: "Transport" },
+        { name: "Sammy Marks Square Taxi Rank", lon: 28.187, lat: -25.746, type: "Transport" },
+        { name: "Centurion Gautrain Station", lon: 28.187, lat: -25.856, type: "Transport" },
+        { name: "Pretoria Bus Terminal", lon: 28.189, lat: -25.757, type: "Transport" },
+        { name: "Bosman Street Station", lon: 28.190, lat: -25.750, type: "Transport" }, 
+        { name: "Pretoria North Station", lon: 28.175, lat: -25.670, type: "Transport" }
+      ];
+
+      // Time ranges for the concentric isochrone rings (in minutes)
+      const serviceTimeRanges = [10, 30, 40]; 
+      const userTimeRanges = [10, 20, 30]; // Custom time ranges for user click
+      
+      
+      require([
+        "esri/config",
+        "esri/Map",
+        "esri/views/MapView",
+        "esri/Graphic",
+        "esri/layers/GraphicsLayer",
+        "esri/layers/GeoJSONLayer",
+        "esri/geometry/Point",
+      ], function (esriConfig, Map, MapView, Graphic, GraphicsLayer, GeoJSONLayer, Point) {
+
+        // --- Utility for Exponential Backoff (Added for API resilience) ---
+        async function fetchWithRetry(url, options, maxRetries = 5) {
+            let delay = 1000;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status === 429) { // Too Many Requests
+                        throw new Error(`Rate limit hit (429). Retrying in ${delay / 1000}s...`);
+                    }
+                    if (!response.ok) {
+                        // Handle other API errors (e.g., 400 Bad Request) immediately
+                        const errorBody = await response.json();
+                        throw new Error(`ORS API Error (${response.status}): ${JSON.stringify(errorBody)}`);
+                    }
+                    return response;
+                } catch (error) {
+                    // Log the error for debugging, but don't stop the overall application
+                    console.error("Fetch attempt failed:", error.message);
+                    if (i === maxRetries - 1) {
+                        throw new Error("Max retries reached. ORS request failed.");
+                    }
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; // Exponential increase
+                }
+            }
+        }
+        
+        // 1. Configure the ArcGIS SDK with its key
+        esriConfig.apiKey = ARCGIS_API_KEY;
+
+        // Utility to map service type to color and style
+        const serviceColors = {
+            "Health": { color: [229, 62, 62], hex: "#E53E3E", shape: "square" },      // Red
+            "Education": { color: [49, 130, 206], hex: "#3182CE", shape: "triangle" },  // Blue
+            "Retail": { color: [56, 161, 105], hex: "#38A169", shape: "diamond" },     // Green
+            "Parks": { color: [128, 0, 128], hex: "#800080", shape: "x" },             // Violet/Purple 
+            "Transport": { color: [255, 255, 0], hex: "#FFD700", shape: "cross" },      // Gold/Yellow 
+            "Origin": { color: [0, 0, 0], hex: "#000000", shape: "circle" },          // Black for Origin
+            "User": { color: [255, 165, 0], hex: "#FFA500", shape: "circle" }         // Orange/Gold for User Click
+        };
+
+        // Layer to manage user-generated click features (marker and isochrones)
+        const userLayer = new GraphicsLayer({ title: "User Click Analysis" });
+
+
+        /************************************************************
+          * 1. Map setup — Pretoria with Light Basemap
+          ************************************************************/
+        const map = new Map({
+          basemap: "arcgis-light-gray" 
+        });
+
+        const view = new MapView({
+          container: "viewDiv",
+          map,
+          center: [originPoint.lon, originPoint.lat], 
+          zoom: 11.5 
+        });
+
+        // Layer to hold the POI marker graphics
+        const featureLayer = new GraphicsLayer({ title: "Service Markers" });
+        map.add(featureLayer);
+        map.add(userLayer); // Add user layer on top
+
+
+        /************************************************************
+          * 1.5 Markers (Including the Central Hub)
+          ************************************************************/
+        const getSymbol = (type) => {
+            const colorData = serviceColors[type] || serviceColors.Origin;
+            let size = 10;
+            let outlineWidth = 1.5;
+
+            if (type === "Origin" || type === "User") { // Special style for Hubs/User
+                size = 15;
+                outlineWidth = 3;
+            }
+            
+            return {
+                type: "simple-marker",
+                style: colorData.shape, 
+                color: colorData.color.concat(1), // Full opacity
+                size: size, 
+                outline: { color: [255, 255, 255, 0.9], width: outlineWidth }
+            };
+        };
+        
+        // Add all Service Markers
+        serviceLocations.forEach(dest => {
+            const point = new Point({
+                longitude: dest.lon,
+                latitude: dest.lat
+            });
+            
+            const marker = new Graphic({
+                geometry: point,
+                attributes: { name: dest.name, type: dest.type },
+                symbol: getSymbol(dest.type),
+                popupTemplate: {
+                    title: "Service: {name}",
+                    content: `Type: <b>{type}</b><br>Accessibility Profile Origin`
+                }
+            });
+            
+            featureLayer.add(marker);
+        });
+        
+        // Add the Origin Hub Marker (still visible for context)
+        featureLayer.add(new Graphic({
+            geometry: new Point({ longitude: originPoint.lon, latitude: originPoint.lat }),
+            attributes: { name: originPoint.name },
+            symbol: getSymbol(originPoint.type),
+            popupTemplate: {
+                title: "ORIGIN POINT",
+                content: `Starting Location: <b>${originPoint.name}</b>`
+            }
+        }));
+
+
+        /************************************************************
+          * 2. Core function to draw multi-range isochrones 
+          ************************************************************/
+        async function createServiceAccessibilityArea(location, rangeSet, layerToAdd = featureLayer) {
+          
+          const colorData = serviceColors[location.type];
+          const orsUrl = "https://api.openrouteservice.org/v2/isochrones/driving-car";
+          
+          // The single service location is now the origin point for the isochrone
+          const orsData = {
+            locations: [[location.lon, location.lat]],
+            range: rangeSet, 
+            range_type: "time",
+            smoothing: 0.8
+          };
+
+          try {
+            // Use the robust fetch utility
+            const response = await fetchWithRetry(orsUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/geo+json', 
+                'Authorization': ORS_API_KEY 
+              },
+              body: JSON.stringify(orsData)
+            });
+
+            const geojson = await response.json();
+
+            if (geojson.error || !geojson.features || geojson.features.length === 0) {
+              console.warn(`ORS API Warning for ${location.name}:`, geojson.error ? geojson.error.message : "No polygons returned.");
+              return;
+            }
+
+            // --- Define Renderer based on time range and LOCATION TYPE COLOR ---
+            const renderer = {
+                type: "unique-value",
+                field: "value", // The 'value' field contains the time range
+                uniqueValueInfos: rangeSet.map(range => {
+                    // Opacity: Longest range (e.g., 40 min) is lightest, shortest (e.g., 10 min) is darkest
+                    const maxRange = Math.max(...rangeSet);
+                    const opacityRatio = 1 - (range / (maxRange * 1.5)); // Base opacity is inverse of range, then capped
+                    let opacity = Math.min(0.4, opacityRatio * 0.8 + 0.1); 
+                    
+                    return {
+                        value: range, 
+                        label: `${range} Minute Drive Time to ${location.name}`,
+                        symbol: { 
+                            type: "simple-fill", 
+                            color: colorData.color.concat(opacity), // Use the service's color
+                            outline: { 
+                                color: colorData.color.concat(1), 
+                                width: 1 
+                            } 
+                        }
+                    };
+                }),
+                defaultSymbol: { 
+                    type: "simple-fill",
+                    color: [100, 100, 100, 0.05],
+                    outline: { color: [100, 100, 100, 0.5], width: 1 }
+                }
+            };
+            
+            // --- Create GeoJSON Layer ---
+            const geojsonBlob = new Blob([JSON.stringify(geojson)], { type: 'application/json' });
+            const blobUrl = URL.createObjectURL(geojsonBlob);
+
+            const geojsonLayer = new GeoJSONLayer({
+              url: blobUrl,
+              renderer: renderer,
+              title: `${location.name} Accessibility Zones`, 
+              popupEnabled: false, 
+              spatialReference: { wkid: 4326 } 
+            });
+            
+            // Add the layer to the map
+            // If it's a feature layer (initial data), add at bottom index 0
+            if (layerToAdd === featureLayer) {
+                map.add(geojsonLayer, 0); 
+            } else {
+                // If it's a user layer, add it to the specific layer
+                layerToAdd.add(geojsonLayer);
+            }
+            
+
+          } catch (err) {
+            console.error(`ORS request failed for ${location.name} (Fatal):`, err);
+          }
+        }
+        
+        /****************************
+          * 3. LEGEND GENERATION (FIXED: Removed duplicate 'User' entry)
+          ***************************/
+        function generateLegend() {
+            const markerContainer = document.getElementById('markerLegendContent');
+            const isochroneContainer = document.getElementById('isochroneLegendContent');
+
+            // Clear previous content
+            markerContainer.innerHTML = '';
+            isochroneContainer.innerHTML = '';
+
+            // --- 3a. Marker Legend ---
+            // Filter out 'Transport'. 'User' is included here from Object.entries(serviceColors), 
+            // eliminating the need for a manual push and thus removing the duplicate entry.
+            const markerTypes = Object.entries(serviceColors).filter(([type]) => type !== 'Transport'); 
+
+            markerTypes.forEach(([type, data]) => {
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                
+                // Create the symbolic representation
+                const symbol = document.createElement('div');
+                symbol.className = 'legend-symbol border-black';
+                
+                // Adjusted label text
+                let labelText = type === 'Origin' ? 'Central Hub (Origin)' : type === 'User' ? 'Your Click Location' : type;
+
+                // Simple conversion of ArcGIS symbol styles to HTML/CSS
+                if (data.shape === 'circle') symbol.className += ' rounded-full';
+                else if (data.shape === 'triangle') {
+                    symbol.style.backgroundColor = 'transparent';
+                    symbol.style.border = 'none';
+                    symbol.innerHTML = `<svg width="16" height="16" viewbox="0 0 16 16"><polygon points="8,0 16,16 0,16" style="fill:${data.hex};stroke:black;stroke-width:1;" /></svg>`;
+                }
+                else if (data.shape === 'diamond') {
+                    symbol.style.transform = 'rotate(45deg)';
+                    symbol.style.width = '10px';
+                    symbol.style.height = '10px';
+                }
+                else if (data.shape === 'cross' || data.shape === 'x') {
+                     symbol.style.backgroundColor = 'transparent';
+                     symbol.innerHTML = `<span style="color: ${data.hex}; font-weight: bold; font-size: 14px; line-height: 1;">${data.shape === 'cross' ? '+' : 'x'}</span>`;
+                     symbol.style.border = 'none';
+                }
+
+                // Default fill color for simple shapes
+                if (data.shape !== 'triangle' && data.shape !== 'cross' && data.shape !== 'x') {
+                    symbol.style.backgroundColor = data.hex;
+                }
+                
+                const label = document.createTextNode(labelText);
+                
+                item.appendChild(symbol);
+                item.appendChild(label);
+                markerContainer.appendChild(item);
+            });
+
+
+            // --- 3b. Isochrone Time Legend ---
+            // Show the time ranges (using the User Analysis colors as a demo for layers)
+            userTimeRanges.sort((a, b) => b - a).forEach(range => { 
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                
+                const symbol = document.createElement('div');
+                symbol.className = 'legend-symbol w-4 h-4 rounded-md';
+                
+                // Opacity calculation based on user ranges (10, 20, 30)
+                const maxRange = Math.max(...userTimeRanges);
+                const opacityRatio = 1 - (range / (maxRange * 1.5)); 
+                let opacity = Math.min(0.4, opacityRatio * 0.8 + 0.1);
+
+                // Use the User Color (Orange) for the fill demo
+                const demoColor = serviceColors['User'].color;
+                
+                symbol.style.backgroundColor = `rgba(${demoColor[0]}, ${demoColor[1]}, ${demoColor[2]}, ${opacity})`; 
+                symbol.style.borderColor = serviceColors['User'].hex; 
+                symbol.style.borderWidth = '1px';
+                
+                const label = document.createTextNode(`${range} Min Drive Time (Catchment Area)`);
+                
+                item.appendChild(symbol);
+                item.appendChild(label);
+                isochroneContainer.appendChild(item);
+            });
+            
+        }
+        
+        /************************************************************
+          * 4. User Click Event Handler
+          ************************************************************/
+        view.on("click", async (event) => {
+            const mapPoint = event.mapPoint;
+            
+            // 1. Clear previous user analysis features
+            userLayer.removeAll();
+            
+            const userLocation = {
+                name: "User Click Location",
+                lon: mapPoint.longitude,
+                lat: mapPoint.latitude,
+                type: "User"
+            };
+            
+            // 2. Add the new user marker
+            userLayer.add(new Graphic({
+                geometry: new Point({ longitude: mapPoint.longitude, latitude: mapPoint.latitude }),
+                attributes: { name: userLocation.name, type: userLocation.type },
+                symbol: getSymbol(userLocation.type),
+                popupTemplate: {
+                    title: "Custom Start Point",
+                    content: `Lon: ${mapPoint.longitude.toFixed(3)}, Lat: ${mapPoint.latitude.toFixed(3)}`
+                }
+            }));
+            
+            document.getElementById('clickMessage').textContent = 'Processing drive time analysis...';
+            
+            // 3. Generate the isochrones from the click point
+            await createServiceAccessibilityArea(userLocation, userTimeRanges, userLayer);
+            
+            document.getElementById('clickMessage').textContent = 'Analysis complete! Click again to place a new point.';
+        });
+
+
+        /************************************************************
+          * 5. Run the analysis on load for ALL service locations
+          ************************************************************/
+        async function loadAccessibilityMap() {
+            await view.when();
+            
+            // Generate the legend before fetching data
+            generateLegend();
+
+            // Run an isochrone calculation for *each* service location 
+            const promises = serviceLocations.map(location => 
+                createServiceAccessibilityArea(location, serviceTimeRanges, featureLayer)
+            );
+
+            await Promise.all(promises); 
+            console.log("All service-centric accessibility zones requested.");
+        }
+
+        // Start the map loading process!
+        loadAccessibilityMap();
+
+      });
+    </script>
+  </body>
+</html>
