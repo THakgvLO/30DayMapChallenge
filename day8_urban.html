@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Day 8 - Urban - Power Flow & Reach</title>
+  <!-- Load external library first -->
+  <script src="https://unpkg.com/osmtogeojson@2.2.12/osmtogeojson.js"></script>
+  <!-- Load ArcGIS API after -->
+  <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/dark/main.css" />
+  <script src="https://js.arcgis.com/4.29/"></script>
+  <style>
+    html, body, #viewDiv { height: 100%; margin: 0; background: #0a0a0a; }
+
+    .poster {
+      position: absolute; top: 30px; right: 30px;
+      text-align: right; color: #e9e6e3; letter-spacing: .08em;
+      font-family: ui-serif, Georgia, "Times New Roman", serif;
+      pointer-events: none;
+      text-shadow: 0 0 6px rgba(0,0,0,.6);
+      background-color: rgba(0,0,0,.5);
+      border-radius: 8px;
+      padding: 15px 20px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      z-index: 10;
+    }
+
+    .poster h1 { margin: 0; font-weight: 600; font-size: 32px; color: #FFD700; }
+    .poster h2 { margin: .2rem 0 0; font-weight: 300; font-size: 13px; opacity: .85; }
+    .poster small { display: block; margin-top: .4rem; font-size: 11px; opacity: .7; line-height: 1.4; }
+    
+    .legend {
+      position: absolute; bottom: 30px; right: 30px;
+      background-color: rgba(0,0,0,.6);
+      border-radius: 8px;
+      padding: 15px;
+      color: #e9e6e3;
+      font-family: ui-sans-serif, sans-serif;
+      font-size: 12px;
+      z-index: 10;
+    }
+    
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin: 5px 0;
+    }
+    
+    .legend-color {
+      width: 20px;
+      height: 4px;
+      margin-right: 10px;
+      box-shadow: 0 0 6px currentColor;
+    }
+    
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 10px;
+      box-shadow: 0 0 6px currentColor;
+    }
+    
+    .context {
+      position: absolute; bottom: 30px; left: 30px;
+      background-color: rgba(0,0,0,.7);
+      border-radius: 8px;
+      padding: 15px;
+      color: #e9e6e3;
+      font-family: ui-sans-serif, sans-serif;
+      font-size: 11px;
+      max-width: 280px;
+      line-height: 1.5;
+      z-index: 10;
+    }
+    
+    .context-title {
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: #FFD700;
+    }
+  </style>
+</head>
+<body>
+  <div id="viewDiv"></div>
+  <div class="poster">
+    <h2>Urban · Power Flow & Reach</h2>
+    <h1>Johannesburg</h1>
+    <h2>Electricity Infrastructure Network</h2>
+    <h2 id="power-count">Loading power infrastructure...</h2>
+    <small>Visualizing the grid: power lines, poles & substations<br>across South Africa's economic hub</small>
+  </div>
+  
+  <div class="legend">
+    <div style="font-weight: 600; margin-bottom: 8px;">Power Infrastructure</div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: #FF6B00; height: 3px;"></div>
+      <span>High Voltage Lines</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: #FFD700; height: 2px;"></div>
+      <span>Power Lines</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: #4FC3F7; height: 2px;"></div>
+      <span>Minor Lines</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #E91E63;"></div>
+      <span>Substations</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #9E9E9E;"></div>
+      <span>Power Poles</span>
+    </div>
+  </div>
+  
+  <div class="context">
+    <div class="context-title">Energy Access Patterns</div>
+    The power grid density reveals urban development patterns. Eskom's infrastructure extends from affluent northern suburbs through Soweto, showing both the reach and inequality of electricity access in post-apartheid South Africa.
+  </div>
+
+  <script>
+    require([
+      "esri/Map",
+      "esri/views/MapView",
+      "esri/layers/FeatureLayer",
+      "esri/Graphic",
+      "esri/geometry/Point",
+      "esri/geometry/Polyline",
+      "esri/geometry/support/webMercatorUtils"
+    ], function(Map, MapView, FeatureLayer, Graphic, Point, Polyline, webMercatorUtils) {
+
+      const map = new Map({ basemap: "dark-gray-vector" });
+
+      // Johannesburg coordinates - center on greater metro area
+      const view = new MapView({
+        container: "viewDiv",
+        map: map,
+        center: [28.05, -26.20], // Johannesburg CBD area
+        zoom: 11,
+        background: { color: [10,10,10,1] },
+        environment: {
+          bloomEnabled: true,
+          lighting: { 
+            type: "virtual",
+            date: new Date("2024-01-15T20:00:00")
+          }
+        },
+        constraints: {
+          snapToZoom: false
+        }
+      });
+
+      const countDisplay = document.getElementById("power-count");
+
+      // EXPANDED query for more comprehensive power infrastructure
+      const overpassQuery = `[out:json][timeout:90];
+(
+  way["power"="line"](-26.40,27.85,-26.00,28.25);
+  way["power"="minor_line"](-26.40,27.85,-26.00,28.25);
+  way["power"="cable"](-26.40,27.85,-26.00,28.25);
+  node["power"="pole"](-26.40,27.85,-26.00,28.25);
+  node["power"="tower"](-26.40,27.85,-26.00,28.25);
+  node["power"="substation"](-26.40,27.85,-26.00,28.25);
+);
+out body;
+>;
+out skel qt;`;
+
+      console.log("Fetching Johannesburg power infrastructure...");
+      console.log("Query:", overpassQuery);
+
+      fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+        },
+        body: "data=" + encodeURIComponent(overpassQuery)
+      })
+      .then(res => {
+        console.log("Response status:", res.status);
+        
+        if (!res.ok) {
+          return res.text().then(text => {
+            console.error("Response text:", text);
+            throw new Error(`HTTP ${res.status}: ${text.substring(0, 200)}`);
+          });
+        }
+        return res.json();
+      })
+      .then(osmData => {
+        console.log("OSM Data received:", osmData);
+        console.log("Number of elements:", osmData.elements ? osmData.elements.length : 0);
+        
+        if (!osmData.elements || osmData.elements.length === 0) {
+          countDisplay.textContent = "No power infrastructure found";
+          console.warn("No data returned from Overpass API");
+          return;
+        }
+
+        // Separate collections
+        const powerLines = [];
+        const minorLines = [];
+        const substations = [];
+        const poles = [];
+        const nodeMap = {};
+        
+        let lineIdCounter = 1;
+        let nodeIdCounter = 1;
+
+        // First pass: collect all nodes for coordinate lookup
+        osmData.elements.forEach(element => {
+          if (element.type === 'node' && element.lat && element.lon) {
+            nodeMap[element.id] = { lat: element.lat, lon: element.lon };
+          }
+        });
+
+        console.log("Node map created with", Object.keys(nodeMap).length, "nodes");
+
+        // Second pass: process elements
+        osmData.elements.forEach(element => {
+          const tags = element.tags || {};
+          
+          // Debug first 5 features
+          if ((lineIdCounter + nodeIdCounter) <= 5) {
+            console.log(`Feature ${lineIdCounter + nodeIdCounter}:`, {
+              type: element.type,
+              power: tags.power,
+              voltage: tags.voltage,
+              name: tags.name
+            });
+          }
+
+          // Process power lines (ways)
+          if (element.type === 'way' && element.nodes && element.nodes.length > 1) {
+            const paths = [];
+            let validLine = true;
+
+            for (let i = 0; i < element.nodes.length; i++) {
+              const nodeId = element.nodes[i];
+              const node = nodeMap[nodeId];
+              
+              if (node) {
+                const point = webMercatorUtils.geographicToWebMercator(
+                  new Point({ longitude: node.lon, latitude: node.lat })
+                );
+                paths.push([point.x, point.y]);
+              } else {
+                validLine = false;
+                break;
+              }
+            }
+
+            if (validLine && paths.length > 1) {
+              const polyline = new Polyline({
+                paths: [paths],
+                spatialReference: { wkid: 3857 }
+              });
+
+              const graphic = new Graphic({
+                geometry: polyline,
+                attributes: {
+                  ObjectID: lineIdCounter++,
+                  power: tags.power || 'unknown',
+                  voltage: tags.voltage || 'unknown',
+                  name: tags.name || 'Unnamed'
+                }
+              });
+
+              if (tags.power === 'line') {
+                powerLines.push(graphic);
+              } else if (tags.power === 'minor_line' || tags.power === 'cable') {
+                minorLines.push(graphic);
+              } else {
+                powerLines.push(graphic); // Default
+              }
+            }
+          }
+          
+          // Process nodes (poles, substations, towers)
+          else if (element.type === 'node' && element.lat && element.lon) {
+            const point = webMercatorUtils.geographicToWebMercator(new Point({
+              longitude: element.lon,
+              latitude: element.lat
+            }));
+
+            const graphic = new Graphic({
+              geometry: point,
+              attributes: {
+                ObjectID: nodeIdCounter++,
+                power: tags.power || 'unknown',
+                name: tags.name || 'Unnamed'
+              }
+            });
+
+            if (tags.power === 'substation') {
+              substations.push(graphic);
+            } else if (tags.power === 'pole' || tags.power === 'tower') {
+              poles.push(graphic);
+            }
+          }
+        });
+
+        console.log("Power lines:", powerLines.length);
+        console.log("Minor lines:", minorLines.length);
+        console.log("Substations:", substations.length);
+        console.log("Poles/Towers:", poles.length);
+
+        // Create layer for high voltage power lines (orange)
+        if (powerLines.length > 0) {
+          const powerLineLayer = new FeatureLayer({
+            source: powerLines,
+            objectIdField: "ObjectID",
+            geometryType: "polyline",
+            spatialReference: { wkid: 3857 },
+            fields: [
+              { name: "ObjectID", type: "oid" },
+              { name: "power", type: "string" },
+              { name: "voltage", type: "string" },
+              { name: "name", type: "string" }
+            ],
+            renderer: {
+              type: "simple",
+              symbol: {
+                type: "simple-line",
+                color: [255, 107, 0, 0.9],
+                width: 2.5
+              }
+            },
+            featureEffect: {
+              filter: { where: "1=1" },
+              includedEffect: "bloom(0.8, 0.5px, 0.05)"
+            },
+            popupTemplate: {
+              title: "{name}",
+              content: "Type: {power}<br>Voltage: {voltage}"
+            }
+          });
+          map.add(powerLineLayer);
+        }
+
+        // Create layer for minor power lines (yellow)
+        if (minorLines.length > 0) {
+          const minorLineLayer = new FeatureLayer({
+            source: minorLines,
+            objectIdField: "ObjectID",
+            geometryType: "polyline",
+            spatialReference: { wkid: 3857 },
+            fields: [
+              { name: "ObjectID", type: "oid" },
+              { name: "power", type: "string" },
+              { name: "name", type: "string" }
+            ],
+            renderer: {
+              type: "simple",
+              symbol: {
+                type: "simple-line",
+                color: [77, 195, 247, 0.8],
+                width: 1.5
+              }
+            },
+            featureEffect: {
+              filter: { where: "1=1" },
+              includedEffect: "bloom(0.6, 0.3px, 0.03)"
+            },
+            popupTemplate: {
+              title: "Minor Power Line",
+              content: "Type: {power}"
+            }
+          });
+          map.add(minorLineLayer);
+        }
+
+        // Create layer for substations (pink/magenta)
+        if (substations.length > 0) {
+          const substationLayer = new FeatureLayer({
+            source: substations,
+            objectIdField: "ObjectID",
+            geometryType: "point",
+            spatialReference: { wkid: 3857 },
+            fields: [
+              { name: "ObjectID", type: "oid" },
+              { name: "power", type: "string" },
+              { name: "name", type: "string" }
+            ],
+            renderer: {
+              type: "simple",
+              symbol: {
+                type: "simple-marker",
+                color: [233, 30, 99, 1],
+                size: 8,
+                outline: {
+                  color: [255, 64, 129, 0.6],
+                  width: 2
+                }
+              }
+            },
+            featureEffect: {
+              filter: { where: "1=1" },
+              includedEffect: "bloom(1, 0.8px, 0.08)"
+            },
+            popupTemplate: {
+              title: "{name}",
+              content: "Type: Substation"
+            }
+          });
+          map.add(substationLayer);
+        }
+
+        // Create layer for poles/towers (gray)
+        if (poles.length > 0) {
+          const poleLayer = new FeatureLayer({
+            source: poles,
+            objectIdField: "ObjectID",
+            geometryType: "point",
+            spatialReference: { wkid: 3857 },
+            fields: [
+              { name: "ObjectID", type: "oid" },
+              { name: "power", type: "string" },
+              { name: "name", type: "string" }
+            ],
+            renderer: {
+              type: "simple",
+              symbol: {
+                type: "simple-marker",
+                color: [158, 158, 158, 0.8],
+                size: 3,
+                outline: {
+                  color: [189, 189, 189, 0.5],
+                  width: 1
+                }
+              }
+            },
+            featureEffect: {
+              filter: { where: "1=1" },
+              includedEffect: "bloom(0.3, 0.1px, 0.01)"
+            },
+            popupTemplate: {
+              title: "Power Pole/Tower",
+              content: "Type: {power}"
+            }
+          });
+          map.add(poleLayer);
+        }
+
+        const totalItems = powerLines.length + minorLines.length + substations.length + poles.length;
+        countDisplay.textContent = `${totalItems.toLocaleString()} infrastructure elements loaded ✓`;
+        console.log("SUCCESS! Power infrastructure loaded:", totalItems);
+        console.log(`Breakdown: ${powerLines.length} lines, ${minorLines.length} minor, ${substations.length} substations, ${poles.length} poles`);
+      })
+      .catch(error => {
+        console.error("ERROR:", error);
+        console.error("Error stack:", error.stack);
+        countDisplay.textContent = "Error: " + error.message;
+        
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,0,0,0.9);color:white;padding:20px;border-radius:8px;max-width:500px;font-family:monospace;font-size:12px;z-index:1000;';
+        errorDiv.innerHTML = `<strong>Error Details:</strong><br>${error.message}<br><br>Check browser console for full details.`;
+        document.body.appendChild(errorDiv);
+      });
+
+    });
+  </script>
+</body>
+</html>
